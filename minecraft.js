@@ -228,7 +228,7 @@ function World(gl) {
 		dirtyChunks = new Array();
 	}
 	var blockFaces = [
-		[0, 38, 38, 38, 38, 2],
+		[-1, 38, 38, 38, 38, -1],
 		[1, 1, 1, 1, 1, 1],
 		[0, 3, 3, 3, 3, 2],
 		[2, 2, 2, 2, 2, 2],
@@ -312,7 +312,6 @@ function World(gl) {
 		if(emit(block) > 0)
 			addLight(pos, emit(block), "light");
 	}
-	// this will produce an "object" that can be sent to initObjectBuffers
 	// four verts per face
 	var faceNormals = [
 		[0, 1, 0],
@@ -336,11 +335,15 @@ function World(gl) {
 	var faceVertIndices = [0, 1, 2, 0, 2, 3];
 	function addBlock(x, y, z, block, output, bounds) {
 		for(var dir in faceNormals) {
+			var id = faceId(block, dir);
 			var norm = faceNormals[dir];
-			if(solid(getData(x + norm[0], y + norm[1], z + norm[2], "blocks")))
+			if(solid(getData(x + norm[0], y + norm[1], z + norm[2], "blocks")) || id == -1)
 				continue;
-			// add vertex light attributes
-			for(var index in faceVerts[dir]) {
+			// add face indices shifted to current verts
+			for(var index in faceVertIndices)
+				output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
+			for(var index = 0; index < 4; index++) {
+				// add vertex light attributes
 				var value = 0;
 				for(var ldir in faceVerts[dir]) {
 					value += Math.pow(0.8, MAX_LIGHT - getData(
@@ -350,40 +353,30 @@ function World(gl) {
 						"light"));
 				}
 				value /= 4;
+				// uncomment for non-smooth lighting
 				//var value = Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "light"));
 				output.skyLight.push(value);
-			}
-			// add the normals
-			for(var index in faceVerts[dir]) {
+				// add the normals
 				output.normals.push(norm[0], norm[1], norm[2]);
-			}
-			// add the biome color layer
-			for(var index in faceVerts[dir]) {
+				// add the biome color layer
 				var color = faceColor(block, dir);
 				output.matColors.push(color[0], color[1], color[2]);
-			}
-			// add face indices shifted to current verts
-			for(var index in faceVertIndices)
-				output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
-			// add vertices, shifted to current position
-			for(var index in faceVerts[dir]) {
+				// add vertices, shifted to current position
 				var vert = faceVerts[dir][index];
 				output.vertices.push(
 					vert[0] + x - bounds.min[0], 
 					vert[1] + y - bounds.min[1], 
 					vert[2] + z - bounds.min[2]
 				);
-			}
-			// add uvs, shifted based on block type and face number
-			for(var index in faceUVs) {
+				// add uvs, shifted based on block type and face number
 				var uv = faceUVs[index];
-				var id = faceId(block, dir);
 				var ofs = [(id % 16) / 16, Math.floor(id / 16) / 16];
 				output.uvs.push(uv[0] / 16 + ofs[0], 1 - (uv[1] / 16 + ofs[1]));
 			}
 		}
 	}
 	this.generateMesh = function(bounds) {
+		// this will produce an "object" that can be sent to initObjectBuffers
 		var output = new Object();
 		output.vertices = new Array();
 		output.normals = new Array();
@@ -409,7 +402,6 @@ function World(gl) {
 				}
 			}
 		}
-		// when a block is changed, the appropriate mesh should be flagged for regeneration
 		var baseChunk = getChunk(bounds.min[0], bounds.min[1], bounds.min[2]);
 		outputBuffer = initObjectBuffers(gl, output, "chunk", baseChunk.mesh);
 		outputBuffer.location = bounds.min;
