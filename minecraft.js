@@ -125,10 +125,29 @@ function World(gl) {
 	var MAX_LIGHT = 15;
 	var self = this;
 
-	/*this.playerPos = [8, 60, 8];
-	var entities = new Array();
-	this.tick = function () {};
-	this.addEntity = function () {};*/
+	this.entities = new Array();
+	this.Entity = function (pos) {
+		this.box = [0.6, 1.7, 0.6];
+		this.pos = vec3.create(pos);
+		this.vel = [0, 0, 0];
+		this.walkForce = [0, 0, 0];
+	}
+	var frictCoeff = 0.025;
+	var flyCoeff = 0.025;
+	this.tick = function () {
+		// this function should be executed 32 times per second by the main loop
+		for(var i = 0; i < self.entities.length; i++) {
+			var ent = self.entities[i];
+			if(ent.onGround) {
+				vec3.scale(ent.vel, frictCoeff);
+				vec3.add(ent.vel, ent.walkForce);
+			}else{
+				vec3.add(ent.vel, vec3.scale(vec3.create(ent.walkForce), flyCoeff));
+			}
+			vec3.add(ent.vel, [0, -9.8 / 320, 0]);
+			ent.onGround = self.sweepBox(ent.box, ent.pos, ent.vel);
+		}
+	}
 
 	function Chunk(coord) {
 		this.coord = coord;
@@ -467,8 +486,9 @@ function World(gl) {
 		// box is simply a vector indicating the size of the box
 		var minLen;
 		var hitNorm;
-		var length = vec3.length(vel);
+		var hitGround = false;
 		do {
+			var length = vec3.length(vel);
 			minLen = length;
 			hitNorm = undefined;
 			for(var i = 0; i < faceNormals.length; i++) {
@@ -518,9 +538,12 @@ function World(gl) {
 				vec3.add(pos, vec3.scale(vec3.create(hitNorm), -0.005));
 				// adjust velocity
 				vec3.add(vel, vec3.scale(vec3.create(hitNorm), -vec3.dot(vel, hitNorm)));
+				if(hitNorm[1] == -1)
+					hitGround = true;
 			}
 		} while(hitNorm);
 		vec3.add(pos, vel);
+		return hitGround;
 	}
 }
 
@@ -739,7 +762,8 @@ function skinViewer(filename) {
 		vec3.create([1, 1, 1])
 	];
 
-	var camPos = [-20, 50, 30];
+	//var camPos = [-20, 50, 30];
+	world.entities[0] = new world.Entity([16, 100, 16]);
 	var camRot = [45, 45, 0];
 
 	var lastMousePos = [0, 0];
@@ -817,9 +841,10 @@ function skinViewer(filename) {
 	var lastTime = 0;
 	var dayRot = 0;
 	var selectedBlock = null;
+	var gameTime = new Date().getTime();
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
-		selectedBlock = world.traceRay([camPos[0], camPos[1] + 0.65, camPos[2]], [-dirs[2], -dirs[6], -dirs[10]], 20);
+		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
 		// change the position of the selector
 		if(selectedBlock) {
 			model[0].location = vec3.subtract(vec3.create(selectedBlock[0]), [0.005, 0.005, 0.005]);
@@ -830,7 +855,7 @@ function skinViewer(filename) {
 		}
 
 		world.flushMeshes();
-		drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, model, vec3.add([0, 0.65, 0], camPos), camRot, sky);
+		drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, model, vec3.add([0, 0.65, 0], world.entities[0].pos), camRot, sky);
 
 		var timeNow = new Date().getTime();
 		if(lastTime != 0) {
@@ -839,12 +864,23 @@ function skinViewer(filename) {
 			dayRot += elapsed / 5000 * Math.PI;
 			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]);
 		
-			var colBox = [0.6, 1.7, 0.6];
+			// set the player walk force
 			var vel = vec3.add(
-				vec3.scale([-dirs[2], -dirs[6], -dirs[10]], moveDir[2] * elapsed / 100.0), 
-				vec3.scale([-dirs[0], -dirs[4], -dirs[8]], moveDir[0] * elapsed / 100.0)
+				vec3.scale([-dirs[2], -dirs[6], -dirs[10]], moveDir[2] * 31.25 / 100), 
+				vec3.scale([-dirs[0], -dirs[4], -dirs[8]], moveDir[0] * 31.25 / 100)
 			);
-			world.sweepBox(colBox, camPos, vel);
+			world.entities[0].walkForce = vel;
+			
+			// progress the simulation to the curren time
+			var currentTime = new Date().getTime();
+			while(gameTime < currentTime) {
+				world.tick();
+				gameTime += 31.25;
+				if(currentTime - gameTime > 2000) {
+					console.log("can't keep up");
+					gameTime = currentTime;
+				}
+			}
 		}
 		lastTime = timeNow;
 	}, 30);
