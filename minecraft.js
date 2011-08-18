@@ -509,7 +509,10 @@ function World(gl) {
 					}
 				}
 				var totalLen = 0;
-				while(totalLen < length) {
+				while(true) {
+					totalLen += stepToNextBlock(block, offset, dir).len;
+					if(totalLen > length)
+						break;
 					// if there are any physical blocks in the square surrounding the hit point, do collision response
 					for(var x = Math.floor(offset[0] - box[0] / 2); x < offset[0] + box[0] / 2; x++) {
 						for(var y = Math.floor(offset[1] - box[1] / 2); y < offset[1] + box[1] / 2; y++) {
@@ -528,7 +531,6 @@ function World(gl) {
 							}
 						}
 					}
-					totalLen += stepToNextBlock(block, offset, dir).len;
 				}
 			}
 			if(hitNorm) {
