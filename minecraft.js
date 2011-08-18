@@ -487,10 +487,11 @@ function World(gl) {
 		var minLen;
 		var hitNorm;
 		var hitGround = false;
+		var length = vec3.length(vel);
 		do {
-			var length = vec3.length(vel);
 			minLen = length;
 			hitNorm = undefined;
+			var dir = vec3.normalize(vec3.create(vel));
 			for(var i = 0; i < faceNormals.length; i++) {
 				var faceNorm = vec3.create(faceNormals[i]);
 				// sweep the forward moving faces
@@ -505,9 +506,11 @@ function World(gl) {
 						offset[j] += 1;
 					}
 				}
-				var dir = vec3.normalize(vec3.create(vel));
 				var totalLen = 0;
-				while(totalLen < length) {
+				while(true) {
+					totalLen += stepToNextBlock(block, offset, dir).len;
+					if(totalLen > length)
+						break;
 					// if there are any physical blocks in the square surrounding the hit point, do collision response
 					for(var x = Math.floor(offset[0] - box[0] / 2); x < offset[0] + box[0] / 2; x++) {
 						for(var y = Math.floor(offset[1] - box[1] / 2); y < offset[1] + box[1] / 2; y++) {
@@ -526,18 +529,17 @@ function World(gl) {
 							}
 						}
 					}
-					totalLen += stepToNextBlock(block, offset, dir).len;
 				}
 			}
 			if(hitNorm) {
-				var velToHit = vec3.scale(vec3.create(dir), minLen);
 				// apply movement before collision
-				vec3.subtract(vel, velToHit);
-				vec3.add(pos, velToHit);
-				// hack offset to prevent point-on-plane in next iteration
-				vec3.add(pos, vec3.scale(vec3.create(hitNorm), -0.005));
+				vec3.add(pos, vec3.scale(vec3.create(dir), minLen));
 				// adjust velocity
 				vec3.add(vel, vec3.scale(vec3.create(hitNorm), -vec3.dot(vel, hitNorm)));
+				// hack offset to prevent point-on-plane in next iteration
+				vec3.add(pos, vec3.scale(vec3.create(hitNorm), -0.005));
+				// adjust length for next cycle
+				length -= minLen;
 				if(hitNorm[1] == -1)
 					hitGround = true;
 			}
@@ -769,8 +771,8 @@ function skinViewer(filename) {
 	var lastMousePos = [0, 0];
 	function lookFunc(event) {
 		var delta = [event.clientX - lastMousePos[0], event.clientY - lastMousePos[1]];
-		camRot[1] += delta[0] / 2;
-		camRot[0] += delta[1] / 2;
+		camRot[1] += delta[0] * 0.25;
+		camRot[0] += delta[1] * 0.25;
 		if(camRot[0] > 90)
 			camRot[0] = 90;
 		if(camRot[0] < -90)
@@ -819,6 +821,9 @@ function skinViewer(filename) {
 				world.setBlock(vec3.add(selectedBlock[0], faceNormals[selectedBlock[2]]), document.getElementById("blockType").value);
 			}
 			break;
+		case 32: // space
+			moveDir[1] = 1;
+			break;
 		default:
 			//alert(event.keyCode);
 			break;
@@ -834,6 +839,9 @@ function skinViewer(filename) {
 		case 65: // 65 a
 		case 68: // 68 d
 			moveDir[0] = 0;
+			break;
+		case 32: // space
+			moveDir[1] = 0;
 			break;
 		}
 	}, false);
@@ -865,10 +873,13 @@ function skinViewer(filename) {
 			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]);
 		
 			// set the player walk force
+			var dirs = eulerToMat([0, camRot[1], 0]);
 			var vel = vec3.add(
-				vec3.scale([-dirs[2], -dirs[6], -dirs[10]], moveDir[2] * 31.25 / 100), 
-				vec3.scale([-dirs[0], -dirs[4], -dirs[8]], moveDir[0] * 31.25 / 100)
+				vec3.scale([-dirs[2], -dirs[6], -dirs[10]], moveDir[2]), 
+				vec3.scale([-dirs[0], -dirs[4], -dirs[8]], moveDir[0])
 			);
+			vec3.scale(vec3.normalize(vel), 31.25 / 200);
+			vec3.add(vel, [0, moveDir[1] * 31.25 / 100, 0]);
 			world.entities[0].walkForce = vel;
 			
 			// progress the simulation to the curren time
