@@ -492,6 +492,8 @@ function World(gl) {
 			minLen = length;
 			hitNorm = undefined;
 			var dir = vec3.normalize(vec3.create(vel));
+			if(vec3.length(dir) == 0)
+				break;
 			for(var i = 0; i < faceNormals.length; i++) {
 				var faceNorm = vec3.create(faceNormals[i]);
 				// sweep the forward moving faces
@@ -533,16 +535,20 @@ function World(gl) {
 				// apply movement before collision
 				vec3.add(pos, vec3.scale(vec3.create(dir), minLen));
 				// adjust velocity
+				var velMagBefore = vec3.length(vel);
 				vec3.add(vel, vec3.scale(vec3.create(hitNorm), -vec3.dot(vel, hitNorm)));
+				var velMagAfter = vec3.length(vel);
 				// hack offset to prevent point-on-plane in next iteration
 				vec3.add(pos, vec3.scale(vec3.create(hitNorm), -0.005));
 				// adjust length for next cycle
 				length -= minLen;
+				length *= velMagAfter / velMagBefore;
 				if(hitNorm[1] == -1)
 					hitGround = true;
 			}
 		} while(hitNorm);
-		vec3.add(pos, vel);
+		// add the remaining velocity
+		vec3.add(pos, vec3.scale(vec3.create(dir), minLen));
 		return hitGround;
 	}
 }
