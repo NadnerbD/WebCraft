@@ -4,6 +4,7 @@ attribute vec2 aTextureCoord; \n\
 attribute vec3 aVertexColor; \n\
 attribute vec3 aNormal; \n\
 attribute float aSkyLight; \n\
+attribute float aBlockLight; \n\
 uniform mat4 uMVMatrix; \n\
 uniform mat4 uPMatrix; \n\
 uniform vec3 uSkyLightDir; \n\
@@ -14,7 +15,9 @@ varying vec3 vVertexColor; \n\
 void main(void) { \n\
 	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0); \n\
 	vTextureCoord = aTextureCoord; \n\
-	vVertexColor = aVertexColor * (uSkyLightAmbientColor + max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor) * aSkyLight; \n\
+	vec3 skyLightColor = (uSkyLightAmbientColor + max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor) * aSkyLight; \n\
+	vec3 blockLightColor =  vec3(1, 1, 1) * aBlockLight; \n\
+	vVertexColor = aVertexColor * max(skyLightColor, blockLightColor); \n\
 } \n\
 ";
 
@@ -88,6 +91,9 @@ function initShaders(gl) {
 	shaderProgram.vertexSkyLightAttribute = gl.getAttribLocation(shaderProgram, "aSkyLight");
 	gl.enableVertexAttribArray(shaderProgram.vertexSkyLightAttribute);
 
+	shaderProgram.vertexBlockLightAttribute = gl.getAttribLocation(shaderProgram, "aBlockLight");
+	gl.enableVertexAttribArray(shaderProgram.vertexBlockLightAttribute);
+
 	shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
 	shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
 	shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
@@ -125,6 +131,8 @@ function World(gl) {
 	var MAX_LIGHT = 15;
 	var self = this;
 
+	this.smoothLighting = true;
+
 	this.entities = new Array();
 	this.Entity = function (pos) {
 		this.box = [0.6, 1.7, 0.6];
@@ -153,18 +161,22 @@ function World(gl) {
 		this.coord = coord;
 		this.mesh = null;
 		this.blocks = new Array();
-		this.light = new Array();
+		this.skyLight = new Array();
+		this.blockLight = new Array();
 		for(var x = 0; x < CHUNK_WIDTH_X; x++) {
 			this.blocks[x] = new Array();
-			this.light[x] = new Array();
+			this.skyLight[x] = new Array();
+			this.blockLight[x] = new Array();
 			for(var y = 0; y < CHUNK_WIDTH_Y; y++) {
 				this.blocks[x][y] = new Array();
-				this.light[x][y] = new Array();
+				this.skyLight[x][y] = new Array();
+				this.blockLight[x][y] = new Array();
 				for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 					var blockValue = Math.sin(x * Math.PI / 5) + Math.sin(z * Math.PI / 5) > (y - 20) / 5 
 						&& x >= 0 && x < 16 && z >= 0 && z < 16 && y >= 0 && y < 128;
 					this.blocks[x][y][z] = blockValue * 1;
-					this.light[x][y][z] = !blockValue * MAX_LIGHT;
+					this.skyLight[x][y][z] = !blockValue * MAX_LIGHT;
+					this.blockLight[x][y][z] = 0;
 				}
 			}
 		}
@@ -184,27 +196,29 @@ function World(gl) {
 	}
 
 	/* temporary chunk generation code */
-	//chunks[0] = new Array();
-	//chunks[0][0] = new Array();
-	chunks[0][0][0].mesh = null; // = new Chunk(0);
-	chunks[0][0][1].mesh = null; // = new Chunk(1);
-	chunks[0][0][2].mesh = null; // = new Chunk(2);
-	//chunks[1] = new Array();
-	//chunks[1][0] = new Array();
-	chunks[1][0][0].mesh = null; // = new Chunk(3);
-	chunks[1][0][1].mesh = null; // = new Chunk(4);
-	chunks[1][0][2].mesh = null; // = new Chunk(5);
-	//chunks[2] = new Array();
-	//chunks[2][0] = new Array();
-	chunks[2][0][0].mesh = null; // = new Chunk(6);
-	chunks[2][0][1].mesh = null; // = new Chunk(7);
-	chunks[2][0][2].mesh = null; // = new Chunk(8);
+	chunks[0] = new Array();
+	chunks[0][0] = new Array();
+	chunks[0][0][0] = new Chunk(0);
+	chunks[0][0][1] = new Chunk(1);
+	chunks[0][0][2] = new Chunk(2);
+	chunks[1] = new Array();
+	chunks[1][0] = new Array();
+	chunks[1][0][0] = new Chunk(3);
+	chunks[1][0][1] = new Chunk(4);
+	chunks[1][0][2] = new Chunk(5);
+	chunks[2] = new Array();
+	chunks[2][0] = new Array();
+	chunks[2][0][0] = new Chunk(6);
+	chunks[2][0][1] = new Chunk(7);
+	chunks[2][0][2] = new Chunk(8);
 	/* end temp chunk gen code */
 
 	function opacity(block) {
 		return (block > 0) * MAX_LIGHT;
 	}
 	function emit(block) {
+		if(block == 89) // lightstone
+			return 15;
 		return 0;
 	}
 	function solid(block) {
@@ -226,7 +240,7 @@ function World(gl) {
 		return chunk;
 	}
 	function getData(x, y, z, channel) {
-		var def = (channel == 'light') * MAX_LIGHT;
+		var def = (channel == 'skyLight') * MAX_LIGHT;
 		var chunk = getChunk(x, y, z);
 		if(!chunk)
 			return def;
@@ -254,6 +268,7 @@ function World(gl) {
 		[16, 16, 16, 16, 16, 16],
 		[4, 4, 4, 4, 4, 4]
 	];
+	blockFaces[89] = [105, 105, 105, 105, 105, 105];
 	function faceId(block, face) {
 		return blockFaces[block][face];
 	}
@@ -273,7 +288,7 @@ function World(gl) {
 			var adjOpac = opacity(getData(adjPos[0], adjPos[1], adjPos[2], "blocks"));
 			var adjValue = getData(adjPos[0], adjPos[1], adjPos[2], channel);
 			var nextValue = value - adjOpac - 1;
-			if(adjOpac == 0 && i == 5 && value == MAX_LIGHT && channel == "light")
+			if(adjOpac == 0 && i == 5 && value == MAX_LIGHT && channel == "skyLight")
 				nextValue = value;
 			if(nextValue > adjValue)
 				addLight(adjPos, nextValue, channel);
@@ -281,13 +296,13 @@ function World(gl) {
 	}
 	function removeLight(pos, channel, notFirst) {
 		var locLight = getData(pos[0], pos[1], pos[2], channel);
-		setData(pos[0], pos[1], pos[2], channel, 0);
+		setData(pos[0], pos[1], pos[2], channel, -1);
 		for(var i in faceNormals) {
 			var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
 			var adjLight = getData(adjPos[0], adjPos[1], adjPos[2], channel);
 			if(adjLight > 0 && adjLight < locLight)
 				removeLight(adjPos, channel, 1);
-			else if(adjLight == MAX_LIGHT && i == 5 && channel == "light") // remove downward skyLight
+			else if(adjLight == MAX_LIGHT && i == 5 && channel == "skyLight") // remove downward skyLight
 				removeLight(adjPos, channel, 1);
 		}
 		if(!notFirst) {
@@ -301,12 +316,12 @@ function World(gl) {
 		if(!result)
 			result = new Array();
 		// so far I haven't found a downside to just leaving black light at -1
-		setData(pos[0], pos[1], pos[2], channel, -1);
+		setData(pos[0], pos[1], pos[2], channel, 0);
 		for(var i in faceNormals) {
 			var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
 			var adjLight = getData(adjPos[0], adjPos[1], adjPos[2], channel);
 			var adjBlock = getData(adjPos[0], adjPos[1], adjPos[2], "blocks");
-			if(adjLight == 0 && opacity(adjBlock) < MAX_LIGHT) {
+			if(adjLight == -1) {
 				findLight(adjPos, channel, result);	
 			}else if(adjLight > 0) {
 				result.push([adjPos, adjLight]);
@@ -323,13 +338,23 @@ function World(gl) {
 		}
 	}
 	this.setBlock = function(pos, block) {
+		// if there is already an emissive block here, remove it's light
+		if(emit(getData(pos[0], pos[1], pos[2], "blocks")))
+			removeLight(pos, "blockLight");
 		setData(pos[0], pos[1], pos[2], "blocks", block);
-		if(opacity(block) > 0)
-			removeLight(pos, "light");
-		if(opacity(block) < MAX_LIGHT)
-			touchLight(pos, "light");
+		// if we're placing an opaque block, remove light at it's location
+		if(opacity(block) > 0) {
+			removeLight(pos, "skyLight");
+			if(!emit(block))
+				removeLight(pos, "blockLight");
+		}
+		// if we removed an opaque block, get light to flow in
+		if(opacity(block) == 0) {
+			touchLight(pos, "skyLight");
+			touchLight(pos, "blockLight");
+		}
 		if(emit(block) > 0)
-			addLight(pos, emit(block), "light");
+			addLight(pos, emit(block), "blockLight");
 	}
 	// four verts per face
 	var faceNormals = [
@@ -352,6 +377,19 @@ function World(gl) {
 	// the same for all faces
 	var faceUVs = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
 	var faceVertIndices = [0, 1, 2, 0, 2, 3];
+	function getVertLight(x, y, z, face, vert, channel) {
+		var norm = faceNormals[face];
+		var verts = faceVerts[face];
+		var value = 0;
+		for(var ofs = 0; ofs < 4; ofs++) {
+			value += Math.pow(0.8, MAX_LIGHT - getData(
+				x + norm[0] + verts[vert][0] - verts[ofs][0],
+				y + norm[1] + verts[vert][1] - verts[ofs][1],
+				z + norm[2] + verts[vert][2] - verts[ofs][2],
+				channel));
+		}
+		return value / 4;
+	}
 	function addBlock(x, y, z, block, output, bounds) {
 		for(var dir in faceNormals) {
 			var id = faceId(block, dir);
@@ -362,19 +400,17 @@ function World(gl) {
 			for(var index in faceVertIndices)
 				output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
 			for(var index = 0; index < 4; index++) {
-				// add vertex light attributes
-				var value = 0;
-				for(var ldir in faceVerts[dir]) {
-					value += Math.pow(0.8, MAX_LIGHT - getData(
-						x + norm[0] + faceVerts[dir][index][0] - faceVerts[dir][ldir][0], 
-						y + norm[1] + faceVerts[dir][index][1] - faceVerts[dir][ldir][1], 
-						z + norm[2] + faceVerts[dir][index][2] - faceVerts[dir][ldir][2], 
-						"light"));
+				// get the vertex lighting attributes
+				if(emit(block)) {
+					output.skyLight.push(0);
+					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - emit(block)));
+				}else if(self.smoothLighting) {
+					output.skyLight.push(getVertLight(x, y, z, dir, index, "skyLight"));
+					output.blockLight.push(getVertLight(x, y, z, dir, index, "blockLight"));
+				}else{
+					output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "skyLight")));
+					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "blockLight")));
 				}
-				value /= 4;
-				// uncomment for non-smooth lighting
-				//var value = Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "light"));
-				output.skyLight.push(value);
 				// add the normals
 				output.normals.push(norm[0], norm[1], norm[2]);
 				// add the biome color layer
@@ -402,6 +438,7 @@ function World(gl) {
 		output.uvs = new Array();
 		output.faces = new Array();
 		output.skyLight = new Array();
+		output.blockLight = new Array();
 		output.matColors = new Array();
 		for(var z = bounds.min[2]; z < bounds.max[2]; z++) {
 			for(var y = bounds.min[1]; y < bounds.max[1]; y++) {
@@ -564,6 +601,7 @@ function initObjectBuffers(gl, obj, name, buffers) {
 			uvBuffer: gl.createBuffer(),
 			colorBuffer: gl.createBuffer(),
 			skyBuffer: gl.createBuffer(),
+			blockBuffer: gl.createBuffer(),
 			indexBuffer: gl.createBuffer(),
 			location: obj.location,
 			rotation: obj.rotation,
@@ -598,6 +636,11 @@ function initObjectBuffers(gl, obj, name, buffers) {
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(obj.skyLight), gl.STATIC_DRAW);
 	out.skyBuffer.itemSize = 1;
 	out.skyBuffer.numItems = obj.skyLight.length;
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, out.blockBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(obj.blockLight), gl.STATIC_DRAW);
+	out.blockBuffer.itemSize = 1;
+	out.blockBuffer.numItems = obj.blockLight.length;
 
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, out.indexBuffer);
 	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(obj.faces), gl.STATIC_DRAW);
@@ -701,6 +744,9 @@ function drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, 
 		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].skyBuffer);
 		gl.vertexAttribPointer(shaderProgram.vertexSkyLightAttribute, model[i].skyBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
+		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].blockBuffer);
+		gl.vertexAttribPointer(shaderProgram.vertexBlockLightAttribute, model[i].blockBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, model[i].indexBuffer);
 
 		if(model[i].name == "selector") {
@@ -715,8 +761,8 @@ function drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, 
 
 function skinViewer(filename) {
 	var canvas = document.createElement("canvas");
-	canvas.width = 800;
-	canvas.height = 600;
+	canvas.width = 1024;
+	canvas.height = 768;
 	var gl = initGL(canvas);
 	if(!gl)
 		return null;
@@ -734,6 +780,7 @@ function skinViewer(filename) {
 		uvs: [0, 0,  0, 0,  0, 0,  0, 0, 0, 0,  0, 0,  0, 0,  0, 0],
 		faces: [0, 1,  0, 2,  0, 4,  1, 3,  1, 5,  2, 3,  2, 6,  3, 7,  4, 5,  4, 6,  5, 7,  6, 7],
 		skyLight: [0, 0, 0, 0, 0, 0, 0, 0],
+		blockLight: [0, 0, 0, 0, 0, 0, 0, 0],
 		location: [0, 0, 0],
 		rotation: [0, 0, 1, 0],
 		scale: [1.01, 1.01, 1.01]
@@ -751,14 +798,14 @@ function skinViewer(filename) {
 		}
 	}
 
-	model.push(initObjectBuffers(gl, Mesh.Head, "head"));
+	/*model.push(initObjectBuffers(gl, Mesh.Head, "head"));
 	model.push(initObjectBuffers(gl, Mesh.Mask, "mask"));
 	model.push(initObjectBuffers(gl, Mesh.Body, "body"));
 	model.push(initObjectBuffers(gl, Mesh.ArmLeft, "arml"));
 	model.push(initObjectBuffers(gl, Mesh.ArmRight, "armr"));
 	model.push(initObjectBuffers(gl, Mesh.LegLeft, "legl"));
 	model.push(initObjectBuffers(gl, Mesh.LegRight, "legr"));
-	model.push(initObjectBuffers(gl, Mesh.Item, "item"));
+	model.push(initObjectBuffers(gl, Mesh.Item, "item"));*/
 
 	gl.clearColor(0.0, 0.0, 0.0, 1.0);
 	gl.enable(gl.DEPTH_TEST);
