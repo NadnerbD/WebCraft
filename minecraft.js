@@ -168,7 +168,7 @@ function World(gl) {
 				for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 					var blockValue = Math.sin(x * Math.PI / 5) + Math.sin(z * Math.PI / 5) > (y - 20) / 5 
 						&& x >= 0 && x < 16 && z >= 0 && z < 16 && y >= 0 && y < 128;
-					this.blocks[coToI(x, y, z)] = blockValue * 1;
+					this.blocks[coToI(x, y, z)] = blockValue * 1; // stone
 					this.skyLight[coToI(x, y, z)] = !blockValue * MAX_LIGHT;
 					this.blockLight[coToI(x, y, z)] = 0;
 				}
@@ -181,9 +181,11 @@ function World(gl) {
 					if(this.blocks[coToI(x, y, z)] != 0)
 						depth++;
 					if(depth == 1)
-						this.blocks[coToI(x, y, z)] = 2;
+						this.blocks[coToI(x, y, z)] = 2; // grassy dirt
 					if(depth > 1 && depth <= 4)
-						this.blocks[coToI(x, y, z)] = 3;
+						this.blocks[coToI(x, y, z)] = 3; // dirt
+					if(y == 0)
+						this.blocks[coToI(x, y, z)] = 7; // bedrock
 				}
 			}
 		}
@@ -258,19 +260,21 @@ function World(gl) {
 		dirtyChunks = new Array();
 	}
 	var blockFaces = [
-		[-1, 38, 38, 38, 38, -1],
-		[1, 1, 1, 1, 1, 1],
-		[0, 3, 3, 3, 3, 2],
-		[2, 2, 2, 2, 2, 2],
-		[16, 16, 16, 16, 16, 16],
-		[4, 4, 4, 4, 4, 4]
+		[-1, 38, 38, 38, 38, -1], 	// grassy dirt grass sides
+		[1, 1, 1, 1, 1, 1], 		// stone
+		[0, 3, 3, 3, 3, 2], 		// grassy dirt
+		[2, 2, 2, 2, 2, 2], 		// dirt
+		[16, 16, 16, 16, 16, 16], 	// cobble
+		[4, 4, 4, 4, 4, 4], 		// wood
+		[],				// trees
+		[17, 17, 17, 17, 17, 17], 	// bedrock
 	];
 	blockFaces[89] = [105, 105, 105, 105, 105, 105];
 	function faceId(block, face) {
 		return blockFaces[block][face];
 	}
 	function faceColor(block, face) {
-		if((block == 2 && face == 0) || (block == 0 && face != 5))
+		if((block == 2 && face == 0) || block == 0)
 			return [0.5, 1, 0];
 		else
 			return [1, 1, 1];
@@ -336,7 +340,10 @@ function World(gl) {
 	}
 	this.setBlock = function(pos, block) {
 		// if there is already an emissive block here, remove it's light
-		if(emit(getData(pos[0], pos[1], pos[2], "blocks")))
+		var initBlock = getData(pos[0], pos[1], pos[2], "blocks");
+		if(initBlock == 7) // cannot overwrite bedrock
+			return;
+		if(emit(initBlock))
 			removeLight(pos, "blockLight");
 		setData(pos[0], pos[1], pos[2], "blocks", block);
 		// if we're placing an opaque block, remove light at it's location
