@@ -164,19 +164,13 @@ function World(gl) {
 		this.skyLight = new Array();
 		this.blockLight = new Array();
 		for(var x = 0; x < CHUNK_WIDTH_X; x++) {
-			this.blocks[x] = new Array();
-			this.skyLight[x] = new Array();
-			this.blockLight[x] = new Array();
 			for(var y = 0; y < CHUNK_WIDTH_Y; y++) {
-				this.blocks[x][y] = new Array();
-				this.skyLight[x][y] = new Array();
-				this.blockLight[x][y] = new Array();
 				for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 					var blockValue = Math.sin(x * Math.PI / 5) + Math.sin(z * Math.PI / 5) > (y - 20) / 5 
 						&& x >= 0 && x < 16 && z >= 0 && z < 16 && y >= 0 && y < 128;
-					this.blocks[x][y][z] = blockValue * 1;
-					this.skyLight[x][y][z] = !blockValue * MAX_LIGHT;
-					this.blockLight[x][y][z] = 0;
+					this.blocks[coToI(x, y, z)] = blockValue * 1;
+					this.skyLight[coToI(x, y, z)] = !blockValue * MAX_LIGHT;
+					this.blockLight[coToI(x, y, z)] = 0;
 				}
 			}
 		}
@@ -184,12 +178,12 @@ function World(gl) {
 			for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 				var depth = 0;
 				for(var y = CHUNK_WIDTH_Y - 1; y >= 0; y--) {
-					if(this.blocks[x][y][z] != 0)
+					if(this.blocks[coToI(x, y, z)] != 0)
 						depth++;
 					if(depth == 1)
-						this.blocks[x][y][z] = 2;
+						this.blocks[coToI(x, y, z)] = 2;
 					if(depth > 1 && depth <= 4)
-						this.blocks[x][y][z] = 3;
+						this.blocks[coToI(x, y, z)] = 3;
 				}
 			}
 		}
@@ -239,17 +233,20 @@ function World(gl) {
 			return null;
 		return chunk;
 	}
+	function coToI(x, y, z) {
+		return y + (z * CHUNK_WIDTH_Y + (x * CHUNK_WIDTH_Y * CHUNK_WIDTH_Z));
+	}
 	function getData(x, y, z, channel) {
 		var def = (channel == 'skyLight') * MAX_LIGHT;
 		var chunk = getChunk(x, y, z);
 		if(!chunk)
 			return def;
-		return chunk[channel][x % CHUNK_WIDTH_X][y % CHUNK_WIDTH_Y][z % CHUNK_WIDTH_Z];
+		return chunk[channel][coToI(x % CHUNK_WIDTH_X, y % CHUNK_WIDTH_Y, z % CHUNK_WIDTH_Z)];
 	}
 	function setData(x, y, z, channel, data) {
 		var chunk = getChunk(x, y, z);
 		if(chunk) {
-			chunk[channel][x % CHUNK_WIDTH_X][y % CHUNK_WIDTH_Y][z % CHUNK_WIDTH_Z] = data;
+			chunk[channel][coToI(x % CHUNK_WIDTH_X, y % CHUNK_WIDTH_Y, z % CHUNK_WIDTH_Z)] = data;
 			dirtyChunks[chunk.coord] = chunk;
 		}
 	}
@@ -681,7 +678,7 @@ function drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, 
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var pMatrix = mat4.create();
-	mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+	mat4.perspective(70, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
 	gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
 	
 	var mvMatrixStack = [];
