@@ -210,7 +210,7 @@ function World(gl) {
 	/* end temp chunk gen code */
 
 	function opacity(block) {
-		return (block > 0) * MAX_LIGHT;
+		return (block > 0 && block != 6) * MAX_LIGHT;
 	}
 	function emit(block) {
 		if(block == 89) // lightstone
@@ -218,10 +218,10 @@ function World(gl) {
 		return 0;
 	}
 	function solid(block) {
-		return block > 0;
+		return block > 0 && block != 6;
 	}
 	function physical(block) {
-		return block > 0;
+		return block > 0 && block != 6;
 	}
 	function getChunk(x, y, z) {
 		var row = chunks[Math.floor(x / CHUNK_WIDTH_X)];
@@ -260,18 +260,22 @@ function World(gl) {
 		dirtyChunks = new Array();
 	}
 	var blockFaces = [
-		[-1, 38, 38, 38, 38, -1], 	// grassy dirt grass sides
-		[1, 1, 1, 1, 1, 1], 		// stone
-		[0, 3, 3, 3, 3, 2], 		// grassy dirt
-		[2, 2, 2, 2, 2, 2], 		// dirt
-		[16, 16, 16, 16, 16, 16], 	// cobble
-		[4, 4, 4, 4, 4, 4], 		// wood
-		[],				// trees
-		[17, 17, 17, 17, 17, 17], 	// bedrock
+		[[-1, 38, 38, 38, 38, -1]], 	// grassy dirt grass sides
+		[[1, 1, 1, 1, 1, 1]], 		// stone
+		[[0, 3, 3, 3, 3, 2]], 		// grassy dirt
+		[[2, 2, 2, 2, 2, 2]], 		// dirt
+		[[16, 16, 16, 16, 16, 16]], 	// cobble
+		[[4, 4, 4, 4, 4, 4]], 		// wood
+		[[15], [63], [79]],		// trees
+		[[17, 17, 17, 17, 17, 17]], 	// bedrock
 	];
-	blockFaces[89] = [105, 105, 105, 105, 105, 105];
-	function faceId(block, face) {
-		return blockFaces[block][face];
+	blockFaces[89] = [105, 105, 105, 105, 105, 105]; // lightstone
+	function faceId(block, face, data) {
+		// "data" is the secondary block metadata thing in notch's chunks
+		if(data == undefined)
+			data = 0;
+		var blockData = blockFaces[block][data];
+		return blockData[face % blockData.length];
 	}
 	function faceColor(block, face) {
 		if((block == 2 && face == 0) || block == 0)
@@ -279,8 +283,8 @@ function World(gl) {
 		else
 			return [1, 1, 1];
 	}
-	function isModel(block) {
-		return false;
+	function isCross(block) {
+		return block == 6;
 	}
 	function addLight(pos, value, channel) {
 		setData(pos[0], pos[1], pos[2], channel, value);
@@ -378,6 +382,18 @@ function World(gl) {
 		[[0, 1, 0], [1, 1, 0], [1, 0, 0], [0, 0, 0]],
 		[[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]
 	];
+	var crossNormals = [
+		vec3.normalize([1, 0, -1]),
+		vec3.normalize([-1, 0, 1]),
+		vec3.normalize([-1, 0, -1]),
+		vec3.normalize([1, 0, 1])
+	];
+	var crossVerts = [
+		[[0, 1, 0], [1, 1, 1], [1, 0, 1], [0, 0, 0]],
+		[[1, 1, 1], [0, 1, 0], [0, 0, 0], [1, 0, 1]],
+		[[1, 1, 0], [0, 1, 1], [0, 0, 1], [1, 0, 0]],
+		[[0, 1, 1], [1, 1, 0], [1, 0, 0], [0, 0, 1]]
+	];
 	// the same for all faces
 	var faceUVs = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
 	var faceVertIndices = [0, 1, 2, 0, 2, 3];
@@ -394,41 +410,72 @@ function World(gl) {
 		}
 		return value / 4;
 	}
-	function addBlock(x, y, z, block, output, bounds) {
-		for(var dir in faceNormals) {
-			var id = faceId(block, dir);
-			var norm = faceNormals[dir];
-			if(solid(getData(x + norm[0], y + norm[1], z + norm[2], "blocks")) || id == -1)
-				continue;
-			// add face indices shifted to current verts
+	function addCross(x, y, z, block, output, bounds) {
+		for(var face = 0; face < 4; face++) {
+			var id = faceId(block, face);
+			var norm = crossNormals[face];
+			// add face indicies
 			for(var index in faceVertIndices)
 				output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
-			for(var index = 0; index < 4; index++) {
-				// get the vertex lighting attributes
-				if(emit(block)) {
-					output.skyLight.push(0);
-					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - emit(block)));
-				}else if(self.smoothLighting) {
-					output.skyLight.push(getVertLight(x, y, z, dir, index, "skyLight"));
-					output.blockLight.push(getVertLight(x, y, z, dir, index, "blockLight"));
-				}else{
-					output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "skyLight")));
-					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "blockLight")));
-				}
-				// add the normals
-				output.normals.push(norm[0], norm[1], norm[2]);
-				// add the biome color layer
-				var color = faceColor(block, dir);
-				output.matColors.push(color[0], color[1], color[2]);
+			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
+				// flat lighting for cross elements
+				output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x, y, z, "skyLight")));
+				output.blockLight.push(Math.pow(0.8, MAX_LIGHT - getData(x, y, z, "blockLight")));
 				// add vertices, shifted to current position
-				var vert = faceVerts[dir][index];
+				var vert = crossVerts[face][vertIndex];
 				output.vertices.push(
 					vert[0] + x - bounds.min[0], 
 					vert[1] + y - bounds.min[1], 
 					vert[2] + z - bounds.min[2]
 				);
+				// add the normals
+				output.normals.push(norm[0], norm[1], norm[2]);
+				// add the biome color layer
+				var color = faceColor(block, face);
+				output.matColors.push(color[0], color[1], color[2]);
 				// add uvs, shifted based on block type and face number
-				var uv = faceUVs[index];
+				var uv = faceUVs[vertIndex];
+				var ofs = [(id % 16) / 16, Math.floor(id / 16) / 16];
+				output.uvs.push(uv[0] / 16 + ofs[0], 1 - (uv[1] / 16 + ofs[1]));
+				
+			}
+		}
+	}
+	function addBlock(x, y, z, block, output, bounds) {
+		for(var face in faceNormals) {
+			var id = faceId(block, face);
+			var norm = faceNormals[face];
+			if(solid(getData(x + norm[0], y + norm[1], z + norm[2], "blocks")) || id == -1)
+				continue;
+			// add face indices shifted to current verts
+			for(var index in faceVertIndices)
+				output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
+			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
+				// get the vertex lighting attributes
+				if(emit(block)) {
+					output.skyLight.push(0);
+					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - emit(block)));
+				}else if(self.smoothLighting) {
+					output.skyLight.push(getVertLight(x, y, z, face, vertIndex, "skyLight"));
+					output.blockLight.push(getVertLight(x, y, z, face, vertIndex, "blockLight"));
+				}else{
+					output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "skyLight")));
+					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "blockLight")));
+				}
+				// add vertices, shifted to current position
+				var vert = faceVerts[face][vertIndex];
+				output.vertices.push(
+					vert[0] + x - bounds.min[0], 
+					vert[1] + y - bounds.min[1], 
+					vert[2] + z - bounds.min[2]
+				);
+				// add the normals
+				output.normals.push(norm[0], norm[1], norm[2]);
+				// add the biome color layer
+				var color = faceColor(block, face);
+				output.matColors.push(color[0], color[1], color[2]);
+				// add uvs, shifted based on block type and face number
+				var uv = faceUVs[vertIndex];
 				var ofs = [(id % 16) / 16, Math.floor(id / 16) / 16];
 				output.uvs.push(uv[0] / 16 + ofs[0], 1 - (uv[1] / 16 + ofs[1]));
 			}
@@ -448,17 +495,14 @@ function World(gl) {
 			for(var y = bounds.min[1]; y < bounds.max[1]; y++) {
 				for(var x = bounds.min[0]; x < bounds.max[0]; x++) {
 					var block = getData(x, y, z, "blocks");
-					if(!solid(block)) {
-						if(isModel(block)) {
-							// this is not a standard block, we will add it's mesh
-						}else{
-							continue;
-						}
+					if(isCross(block)) {
+						addCross(x, y, z, block, output, bounds);
+					}else if(solid(block)) {
+						// second block layer for biome grass edges
+						if(block == 2)
+							addBlock(x, y, z, 0, output, bounds);
+						addBlock(x, y, z, block, output, bounds);
 					}
-					// second block layer for biome grass edges
-					if(block == 2)
-						addBlock(x, y, z, 0, output, bounds);
-					addBlock(x, y, z, block, output, bounds);
 				}
 			}
 		}
@@ -514,11 +558,12 @@ function World(gl) {
 		}
 		var result = {};
 		var totalLen = 0;
-		while(!physical(getData(block[0], block[1], block[2], "blocks")) && totalLen < length) {
+		// will need a sub-box trace for torches and small things
+		while(getData(block[0], block[1], block[2], "blocks") == 0 && totalLen < length) {
 			result = stepToNextBlock(block, offset, dir);
 			totalLen += result.len;
 		}
-		if(physical(getData(block[0], block[1], block[2], "blocks")) && totalLen < length)
+		if(getData(block[0], block[1], block[2], "blocks") != 0 && totalLen < length)
 			return [block, offset, result.face];
 		else
 			return null;
