@@ -269,7 +269,7 @@ function World(gl) {
 		[[15], [63], [79]],		// trees
 		[[17, 17, 17, 17, 17, 17]], 	// bedrock
 	];
-	blockFaces[89] = [105, 105, 105, 105, 105, 105]; // lightstone
+	blockFaces[89] = [[105, 105, 105, 105, 105, 105]]; // lightstone
 	function faceId(block, face, data) {
 		// "data" is the secondary block metadata thing in notch's chunks
 		if(data == undefined)
@@ -398,6 +398,8 @@ function World(gl) {
 	var faceUVs = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
 	var faceVertIndices = [0, 1, 2, 0, 2, 3];
 	function getVertLight(x, y, z, face, vert, channel) {
+		// get the average of the light values from the four blocks in front of this vert
+		// (in front of meaning in the direction of it's normal)
 		var norm = faceNormals[face];
 		var verts = faceVerts[face];
 		var value = 0;
@@ -410,34 +412,59 @@ function World(gl) {
 		}
 		return value / 4;
 	}
+	function getVertHeight(x, y, z, vert) {
+		// get the maximum data value from the four blocks horizontally adjacent to this vertex
+		var verts = faceVerts[face];
+		if(verts[vert][1] != 1)
+			throw "attempt to shift-check non-top vert";
+		var height = 0;
+		for(var ofs = 0; ofs < 4; ofs++) {
+			var value = getData(
+				x + verts[vert][0] - faceVerts[0][ofs][0],
+				y + verts[vert][1] - faceVerts[0][ofs][1],
+				z + verts[vert][2] - faceVerts[0][ofs][2],
+				"data");
+			if(value > height)
+				height = value;
+		}
+		return value;
+	}
+	function addFace(x, y, z, block, output, bounds, face, id, norm, vertSource) {
+		// inserts all face elements except for vertex lighting
+		for(var index in faceVertIndices)
+			output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
+		for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
+			// add vertices, shifted to current position
+			var vert = vertSource[face][vertIndex];
+			output.vertices.push(
+				vert[0] + x - bounds.min[0], 
+				vert[1] + y - bounds.min[1], 
+				vert[2] + z - bounds.min[2]
+			);
+			// add the normals
+			output.normals.push(norm[0], norm[1], norm[2]);
+			// add the biome color layer
+			var color = faceColor(block, face);
+			output.matColors.push(color[0], color[1], color[2]);
+			// add uvs, shifted based on block type and face number
+			var uv = faceUVs[vertIndex];
+			var ofs = [(id % 16) / 16, Math.floor(id / 16) / 16];
+			output.uvs.push(uv[0] / 16 + ofs[0], 1 - (uv[1] / 16 + ofs[1]));
+		}
+	}
+	function addFluidBlock(x, y, z, block, output, bounds) {
+		// this adds blocks with shifted top verts (based on metadata heightmap)
+		
+	}
 	function addCross(x, y, z, block, output, bounds) {
 		for(var face = 0; face < 4; face++) {
 			var id = faceId(block, face);
 			var norm = crossNormals[face];
-			// add face indicies
-			for(var index in faceVertIndices)
-				output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
+			addFace(x, y, z, block, output, bounds, face, id, norm, crossVerts);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 				// flat lighting for cross elements
 				output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x, y, z, "skyLight")));
 				output.blockLight.push(Math.pow(0.8, MAX_LIGHT - getData(x, y, z, "blockLight")));
-				// add vertices, shifted to current position
-				var vert = crossVerts[face][vertIndex];
-				output.vertices.push(
-					vert[0] + x - bounds.min[0], 
-					vert[1] + y - bounds.min[1], 
-					vert[2] + z - bounds.min[2]
-				);
-				// add the normals
-				output.normals.push(norm[0], norm[1], norm[2]);
-				// add the biome color layer
-				var color = faceColor(block, face);
-				output.matColors.push(color[0], color[1], color[2]);
-				// add uvs, shifted based on block type and face number
-				var uv = faceUVs[vertIndex];
-				var ofs = [(id % 16) / 16, Math.floor(id / 16) / 16];
-				output.uvs.push(uv[0] / 16 + ofs[0], 1 - (uv[1] / 16 + ofs[1]));
-				
 			}
 		}
 	}
@@ -447,9 +474,7 @@ function World(gl) {
 			var norm = faceNormals[face];
 			if(solid(getData(x + norm[0], y + norm[1], z + norm[2], "blocks")) || id == -1)
 				continue;
-			// add face indices shifted to current verts
-			for(var index in faceVertIndices)
-				output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
+			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 				// get the vertex lighting attributes
 				if(emit(block)) {
@@ -462,22 +487,6 @@ function World(gl) {
 					output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "skyLight")));
 					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "blockLight")));
 				}
-				// add vertices, shifted to current position
-				var vert = faceVerts[face][vertIndex];
-				output.vertices.push(
-					vert[0] + x - bounds.min[0], 
-					vert[1] + y - bounds.min[1], 
-					vert[2] + z - bounds.min[2]
-				);
-				// add the normals
-				output.normals.push(norm[0], norm[1], norm[2]);
-				// add the biome color layer
-				var color = faceColor(block, face);
-				output.matColors.push(color[0], color[1], color[2]);
-				// add uvs, shifted based on block type and face number
-				var uv = faceUVs[vertIndex];
-				var ofs = [(id % 16) / 16, Math.floor(id / 16) / 16];
-				output.uvs.push(uv[0] / 16 + ofs[0], 1 - (uv[1] / 16 + ofs[1]));
 			}
 		}
 	}
