@@ -160,6 +160,7 @@ function World(gl) {
 	function Chunk(coord) {
 		this.coord = coord;
 		this.mesh = null;
+		this.data = new Array();
 		this.blocks = new Array();
 		this.skyLight = new Array();
 		this.blockLight = new Array();
@@ -168,6 +169,7 @@ function World(gl) {
 				for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 					var blockValue = Math.sin(x * Math.PI / 5) + Math.sin(z * Math.PI / 5) > (y - 20) / 5 
 						&& x >= 0 && x < 16 && z >= 0 && z < 16 && y >= 0 && y < 128;
+					this.data[coToI(x, y, z)] = 0; // metadata value
 					this.blocks[coToI(x, y, z)] = blockValue * 1; // stone
 					this.skyLight[coToI(x, y, z)] = !blockValue * MAX_LIGHT;
 					this.blockLight[coToI(x, y, z)] = 0;
@@ -209,16 +211,39 @@ function World(gl) {
 	chunks[2][0][2] = new Chunk(8);
 	/* end temp chunk gen code */
 
+	// the following set of functions are my terrible hax to get
+	// block attributes
 	function opacity(block) {
-		return (block > 0 && block != 6) * MAX_LIGHT;
+		// this attribute is used by the light propagation functions
+		return (block > 0 
+			&& block != 6	// trees
+			&& block != 20	// glass
+		) * MAX_LIGHT;
+		// water
+		// leaves
 	}
 	function emit(block) {
+		// this attribute is used by the light propagation functions
 		if(block == 89) // lightstone
 			return 15;
 		return 0;
 	}
 	function solid(block) {
-		return block > 0 && block != 6;
+		// this attribute is used for drawing only
+		// faces which are adjcent to solid blocks will not be drawn
+		return block > 0 
+			&& block != 6	// trees
+			&& block != 8	// water 1
+			&& block != 9	// water 2
+			&& block != 10	// lava 1
+			&& block != 11	// lava 2
+			&& block != 18	// leaves
+			&& block != 20;	// glass
+	}
+	function drawSelfAdj(block) {
+		// this attribute is used for drawing only
+		// special case for leaves
+		return block != 18; // leaves
 	}
 	function physical(block) {
 		return block > 0 && block != 6;
@@ -268,13 +293,28 @@ function World(gl) {
 		[[4, 4, 4, 4, 4, 4]], 		// wood
 		[[15], [63], [79]],		// trees
 		[[17, 17, 17, 17, 17, 17]], 	// bedrock
+		[[205]], [[205]],		// water
+		[[239]], [[239]], 		// lava
+		[[18]], 			// sand
+		[[19]], 			// gravel
+		[[32]],				// gold ore
+		[[33]],				// iron ore
+		[[34]],				// coal ore
+		[
+			[21, 20, 20, 20, 20, 21],	// basic log 
+			[21, 116, 116, 116, 116, 21], 	// pine log
+			[21, 117, 117, 117, 117, 21]	// birch log
+		],
+		[[52], [132], [52]],		// leaves
+		[[48]],				// sponge
+		[[49]],				// glass
+		[[160]],			// lapis ore
+		[[144]],			// lapis block
 	];
 	blockFaces[89] = [[105, 105, 105, 105, 105, 105]]; // lightstone
 	function faceId(block, face, data) {
 		// "data" is the secondary block metadata thing in notch's chunks
-		if(data == undefined)
-			data = 0;
-		var blockData = blockFaces[block][data];
+		var blockData = blockFaces[block][data % blockFaces[block].length];
 		return blockData[face % blockData.length];
 	}
 	function faceColor(block, face) {
@@ -412,18 +452,21 @@ function World(gl) {
 		}
 		return value / 4;
 	}
-	function getVertHeight(x, y, z, vert) {
+	function getVertHeight(x, y, z, face, vert, block) {
 		// get the maximum data value from the four blocks horizontally adjacent to this vertex
 		var verts = faceVerts[face];
 		if(verts[vert][1] != 1)
 			throw "attempt to shift-check non-top vert";
 		var height = 0;
 		for(var ofs = 0; ofs < 4; ofs++) {
-			var value = getData(
+			var co = [
 				x + verts[vert][0] - faceVerts[0][ofs][0],
 				y + verts[vert][1] - faceVerts[0][ofs][1],
-				z + verts[vert][2] - faceVerts[0][ofs][2],
-				"data");
+				z + verts[vert][2] - faceVerts[0][ofs][2]
+			];
+			if(getData(co[0], co[1], co[2], "blocks") != block)
+				continue;
+			var value = getData(co[0], co[1], co[2], "data");
 			if(value > height)
 				height = value;
 		}
@@ -454,11 +497,41 @@ function World(gl) {
 	}
 	function addFluidBlock(x, y, z, block, output, bounds) {
 		// this adds blocks with shifted top verts (based on metadata heightmap)
-		
+		// notch's heightmap is weird, 0 is max, increases with distance to a max that varies
+		for(var face in faceNormals) {
+			var id = faceId(block, face, 0); // data is used for something else here
+			var norm = faceNormals[face];
+			var adjBlock = getData(x + norm[0], y + norm[1], z + norm[2], "blocks");
+			// since fluid blocks are non-solid, we also check if we border our own liquid type
+			if(solid(adjBlock) || adjBlock == block)
+				continue;
+			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts);
+			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
+				// adjust vertical displacement of top vertices
+				var vert = output.vertices[output.vertices.length - 4 + vertIndex];
+				if(vert[1] == 1) {
+					var level = getVertHeight(x, y, z, face, vertIndex, block);
+					vec3.subtract(vert, level / maxFluidLevel(block));
+				}
+				// get the vertex lighting attributes
+				if(emit(block)) {
+					// emit should really only affect blocklight value
+					output.skyLight.push(0);
+					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - emit(block)));
+				}else if(self.smoothLighting) {
+					output.skyLight.push(getVertLight(x, y, z, face, vertIndex, "skyLight"));
+					output.blockLight.push(getVertLight(x, y, z, face, vertIndex, "blockLight"));
+				}else{
+					output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "skyLight")));
+					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - getData(x + norm[0], y + norm[1], z + norm[2], "blockLight")));
+				}
+			}
+		}
 	}
 	function addCross(x, y, z, block, output, bounds) {
 		for(var face = 0; face < 4; face++) {
-			var id = faceId(block, face);
+			var data = getData(x, y, z, "data");
+			var id = faceId(block, face, data);
 			var norm = crossNormals[face];
 			addFace(x, y, z, block, output, bounds, face, id, norm, crossVerts);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
@@ -470,14 +543,17 @@ function World(gl) {
 	}
 	function addBlock(x, y, z, block, output, bounds) {
 		for(var face in faceNormals) {
-			var id = faceId(block, face);
+			var data = getData(x, y, z, "data");
+			var id = faceId(block, face, data);
 			var norm = faceNormals[face];
-			if(solid(getData(x + norm[0], y + norm[1], z + norm[2], "blocks")) || id == -1)
+			var adjBlock = getData(x + norm[0], y + norm[1], z + norm[2], "blocks");
+			if(solid(adjBlock) || (drawSelfAdj(block) && adjBlock == block) || id == -1)
 				continue;
 			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 				// get the vertex lighting attributes
 				if(emit(block)) {
+					// emit should really only affect blocklight value
 					output.skyLight.push(0);
 					output.blockLight.push(Math.pow(0.8, MAX_LIGHT - emit(block)));
 				}else if(self.smoothLighting) {
@@ -506,7 +582,7 @@ function World(gl) {
 					var block = getData(x, y, z, "blocks");
 					if(isCross(block)) {
 						addCross(x, y, z, block, output, bounds);
-					}else if(solid(block)) {
+					}else if(block > 0) {
 						// second block layer for biome grass edges
 						if(block == 2)
 							addBlock(x, y, z, 0, output, bounds);
