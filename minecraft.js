@@ -442,14 +442,20 @@ function World(gl) {
 		// (in front of meaning in the direction of it's normal)
 		var norm = faceNormals[face];
 		var verts = faceVerts[face];
-		var value = 0;
+		var values = new Array();
 		for(var ofs = 0; ofs < 4; ofs++) {
-			value += Math.pow(0.8, MAX_LIGHT - getData(
+			values.push(getData(
 				x + norm[0] + verts[vert][0] - verts[ofs][0],
 				y + norm[1] + verts[vert][1] - verts[ofs][1],
 				z + norm[2] + verts[vert][2] - verts[ofs][2],
 				channel));
 		}
+		// prevent diagonal light leaks
+		if(values[(vert + 1) % 4] == 0 && values[(vert + 3) % 4] == 0)
+			values[(vert + 2) % 4] = 0;
+		var value = 0;
+		for(var ofs = 0; ofs < 4; ofs++)
+			value += Math.pow(0.8, MAX_LIGHT - values[ofs]);
 		return value / 4;
 	}
 	function getVertHeight(x, y, z, face, vert, block) {
