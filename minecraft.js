@@ -157,6 +157,8 @@ function World(gl) {
 		}
 	}
 
+	// 6 octaves, max feature size of 128
+	var terrainNoise = new Noise(6, 128);
 	function Chunk(coord) {
 		this.coord = coord;
 		this.mesh = null;
@@ -165,10 +167,12 @@ function World(gl) {
 		this.skyLight = new Array();
 		this.blockLight = new Array();
 		for(var x = 0; x < CHUNK_WIDTH_X; x++) {
+			var globx = x + coord[0] * CHUNK_WIDTH_X;
 			for(var y = 0; y < CHUNK_WIDTH_Y; y++) {
+				var globy = y + coord[1] * CHUNK_WIDTH_Y;
 				for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
-					var blockValue = Math.sin(x * Math.PI / 5) + Math.sin(z * Math.PI / 5) > (y - 20) / 5 
-						&& x >= 0 && x < 16 && z >= 0 && z < 16 && y >= 0 && y < 128;
+					var globz = z + coord[2] * CHUNK_WIDTH_Z;
+					var blockValue = terrainNoise.sample(globx, globy, globz) - ((globy - 64) / 128) > 0.5;
 					this.data[coToI(x, y, z)] = 0; // metadata value
 					this.blocks[coToI(x, y, z)] = blockValue * 1; // stone
 					this.skyLight[coToI(x, y, z)] = !blockValue * MAX_LIGHT;
@@ -180,7 +184,10 @@ function World(gl) {
 			for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 				var depth = 0;
 				for(var y = CHUNK_WIDTH_Y - 1; y >= 0; y--) {
-					if(this.blocks[coToI(x, y, z)] != 0)
+					var block = this.blocks[coToI(x, y, z)];
+					if(block == 0)
+						depth = 0;
+					else
 						depth++;
 					if(depth == 1)
 						this.blocks[coToI(x, y, z)] = 2; // grassy dirt
@@ -196,19 +203,19 @@ function World(gl) {
 	/* temporary chunk generation code */
 	chunks[0] = new Array();
 	chunks[0][0] = new Array();
-	chunks[0][0][0] = new Chunk(0);
-	chunks[0][0][1] = new Chunk(1);
-	chunks[0][0][2] = new Chunk(2);
+	chunks[0][0][0] = new Chunk([0, 0, 0]);
+	chunks[0][0][1] = new Chunk([0, 0, 1]);
+	chunks[0][0][2] = new Chunk([0, 0, 2]);
 	chunks[1] = new Array();
 	chunks[1][0] = new Array();
-	chunks[1][0][0] = new Chunk(3);
-	chunks[1][0][1] = new Chunk(4);
-	chunks[1][0][2] = new Chunk(5);
+	chunks[1][0][0] = new Chunk([1, 0, 0]);
+	chunks[1][0][1] = new Chunk([1, 0, 1]);
+	chunks[1][0][2] = new Chunk([1, 0, 2]);
 	chunks[2] = new Array();
 	chunks[2][0] = new Array();
-	chunks[2][0][0] = new Chunk(6);
-	chunks[2][0][1] = new Chunk(7);
-	chunks[2][0][2] = new Chunk(8);
+	chunks[2][0][0] = new Chunk([2, 0, 0]);
+	chunks[2][0][1] = new Chunk([2, 0, 1]);
+	chunks[2][0][2] = new Chunk([2, 0, 2]);
 	/* end temp chunk gen code */
 
 	// the following set of functions are my terrible hax to get
@@ -958,7 +965,7 @@ function skinViewer(filename) {
 	];
 
 	//var camPos = [-20, 50, 30];
-	world.entities[0] = new world.Entity([16, 100, 16]);
+	world.entities[0] = new world.Entity([16, 130, 16]);
 	var camRot = [45, 45, 0];
 
 	var lastMousePos = [0, 0];
