@@ -122,7 +122,7 @@ function initTexture(gl, filename) {
 
 
 function World(gl) {
-	//var chunks = new Array();
+	var chunks = new Array();
 	var dirtyChunks = new Array();
 	var CHUNK_WIDTH_X = 16;
 	var CHUNK_WIDTH_Y = 128;
@@ -172,7 +172,7 @@ function World(gl) {
 				var globy = y + coord[1] * CHUNK_WIDTH_Y;
 				for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 					var globz = z + coord[2] * CHUNK_WIDTH_Z;
-					var blockValue = terrainNoise.sample(globx, globy, globz) - ((globy - 64) / 128) > 0.5;
+					var blockValue = terrainNoise.sample(globx, globy, globz) - ((globy - 64) / 256) > 0.5;
 					this.data[coToI(x, y, z)] = 0; // metadata value
 					this.blocks[coToI(x, y, z)] = blockValue * 1; // stone
 					this.skyLight[coToI(x, y, z)] = !blockValue * MAX_LIGHT;
@@ -199,24 +199,6 @@ function World(gl) {
 			}
 		}
 	}
-
-	/* temporary chunk generation code */
-	chunks[0] = new Array();
-	chunks[0][0] = new Array();
-	chunks[0][0][0] = new Chunk([0, 0, 0]);
-	chunks[0][0][1] = new Chunk([0, 0, 1]);
-	chunks[0][0][2] = new Chunk([0, 0, 2]);
-	chunks[1] = new Array();
-	chunks[1][0] = new Array();
-	chunks[1][0][0] = new Chunk([1, 0, 0]);
-	chunks[1][0][1] = new Chunk([1, 0, 1]);
-	chunks[1][0][2] = new Chunk([1, 0, 2]);
-	chunks[2] = new Array();
-	chunks[2][0] = new Array();
-	chunks[2][0][0] = new Chunk([2, 0, 0]);
-	chunks[2][0][1] = new Chunk([2, 0, 1]);
-	chunks[2][0][2] = new Chunk([2, 0, 2]);
-	/* end temp chunk gen code */
 
 	// the following set of functions are my terrible hax to get
 	// block attributes
@@ -256,31 +238,41 @@ function World(gl) {
 		return block > 0 && block != 6;
 	}
 	function getChunk(x, y, z) {
-		var row = chunks[Math.floor(x / CHUNK_WIDTH_X)];
-		if(!row)
+		var cx = Math.floor(x / CHUNK_WIDTH_X);
+		var cy = Math.floor(y / CHUNK_WIDTH_Y);
+		var cz = Math.floor(z / CHUNK_WIDTH_Z);
+		if(cy != 0)
 			return null;
-		var layer = row[Math.floor(y / CHUNK_WIDTH_Y)];
-		if(!layer)
-			return null;
-		var chunk = layer[Math.floor(z / CHUNK_WIDTH_Z)];
-		if(!chunk)
-			return null;
-		return chunk;
+		if(!chunks[cx])
+			chunks[cx] = new Array();
+		var row = chunks[cx];
+		if(!row[cy])
+			row[cy] = new Array();
+		var layer = row[cy];
+		if(!layer[cz])
+			layer[cz] = new Chunk([cx, cy, cz]);
+		return layer[cz];
 	}
 	function coToI(x, y, z) {
 		return y + (z * CHUNK_WIDTH_Y + (x * CHUNK_WIDTH_Y * CHUNK_WIDTH_Z));
+	}
+	function locOfs(x, size) {
+		var ofs = x % size;
+		if(ofs < 0)
+			ofs += size;
+		return ofs;
 	}
 	function getData(x, y, z, channel) {
 		var def = (channel == 'skyLight') * MAX_LIGHT;
 		var chunk = getChunk(x, y, z);
 		if(!chunk)
 			return def;
-		return chunk[channel][coToI(x % CHUNK_WIDTH_X, y % CHUNK_WIDTH_Y, z % CHUNK_WIDTH_Z)];
+		return chunk[channel][coToI(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z))];
 	}
 	function setData(x, y, z, channel, data) {
 		var chunk = getChunk(x, y, z);
 		if(chunk) {
-			chunk[channel][coToI(x % CHUNK_WIDTH_X, y % CHUNK_WIDTH_Y, z % CHUNK_WIDTH_Z)] = data;
+			chunk[channel][coToI(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z))] = data;
 			dirtyChunks[chunk.coord] = chunk;
 		}
 	}
@@ -647,13 +639,7 @@ function World(gl) {
 	}
 	this.traceRay = function (start, dir, length) {
 		var block = [Math.floor(start[0]), Math.floor(start[1]), Math.floor(start[2])];
-		var offset = [start[0] % 1, start[1] % 1, start[2] % 1];
-		// ensure positive offsets to place start inside test cube
-		for(var i in offset) {
-			if(offset[i] < 0) {
-				offset[i] += 1;
-			}
-		}
+		var offset = [locOfs(start[0], 1), locOfs(start[1], 1), locOfs(start[2], 1)];
 		var result = {};
 		var totalLen = 0;
 		// will need a sub-box trace for torches and small things
@@ -685,13 +671,7 @@ function World(gl) {
 					continue;
 				var start = [box[0] * faceNorm[0] / 2 + pos[0], box[1] * faceNorm[1] / 2 + pos[1], box[2] * faceNorm[2] / 2 + pos[2]];
 				var block = [Math.floor(start[0]), Math.floor(start[1]), Math.floor(start[2])];
-				var offset = [start[0] % 1, start[1] % 1, start[2] % 1];
-				// ensure positive offsets to place start inside test cube
-				for(var j in offset) {
-					if(offset[j] < 0) {
-						offset[j] += 1;
-					}
-				}
+				var offset = [locOfs(start[0], 1), locOfs(start[1], 1), locOfs(start[2], 1)];
 				var totalLen = 0;
 				while(true) {
 					totalLen += stepToNextBlock(block, offset, dir).len;
@@ -937,8 +917,8 @@ function skinViewer(filename) {
 	model.push(initObjectBuffers(gl, selector, "selector"));
 
 	var world = new World(gl);
-	for(var x = 0; x < 3; x++) {
-		for(var y = 0; y < 3; y++) {
+	for(var x = -1; x < 2; x++) {
+		for(var y = -1; y < 2; y++) {
 			var start = [x * 16, 0, y * 16];
 			var end = vec3.add([16, 128, 16], start);
 			model.push(world.generateMesh({min: start, max: end}, gl));
@@ -1061,6 +1041,8 @@ function skinViewer(filename) {
 			model[0].location = [0, 0, 0];
 			model[1].location = [0, 0, 0];
 		}
+		if(selectedBlock)
+			document.getElementById("selBlock").innerText = selectedBlock.slice(0, 3);
 
 		world.flushMeshes();
 		drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, model, vec3.add([0, 0.65, 0], world.entities[0].pos), camRot, sky);
