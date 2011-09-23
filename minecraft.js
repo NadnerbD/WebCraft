@@ -123,7 +123,6 @@ function initTexture(gl, filename) {
 
 function World(gl) {
 	var chunks = new Array();
-	var dirtyChunks = new Array();
 	var CHUNK_WIDTH_X = 16;
 	var CHUNK_WIDTH_Y = 128;
 	var CHUNK_WIDTH_Z = 16;
@@ -161,6 +160,7 @@ function World(gl) {
 	var terrainNoise = new Noise(6, 128);
 	function Chunk(coord) {
 		this.coord = coord;
+		this.dirty = false;
 		this.mesh = null;
 		this.data = new Array();
 		this.blocks = new Array();
@@ -273,15 +273,18 @@ function World(gl) {
 		var chunk = getChunk(x, y, z);
 		if(chunk) {
 			chunk[channel][coToI(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z))] = data;
-			dirtyChunks[chunk.coord] = chunk;
+			chunk.dirty = true;
 		}
 	}
-	this.flushMeshes = function () {
-		for(var i in dirtyChunks) {
-			var chunk = dirtyChunks[i];
-			self.generateMesh({min: chunk.mesh.location, max: vec3.add(vec3.create(CHUNK_SIZE), chunk.mesh.location)});
+	this.getChunkMeshes = function (x, y, z) {
+		var chunk = getChunk(x, y, z);
+		if(chunk.dirty || !chunk.mesh) {
+			var gc = [chunk.coord[0] * CHUNK_WIDTH_X, chunk.coord[1] * CHUNK_WIDTH_Y, chunk.coord[2] * CHUNK_WIDTH_Z];
+			console.log("generating mesh at " + gc);
+			self.generateMesh({min: gc, max: [gc[0] + CHUNK_WIDTH_X, gc[1] + CHUNK_WIDTH_Y, gc[2] + CHUNK_WIDTH_Z]});
+			chunk.dirty = false;
 		}
-		dirtyChunks = new Array();
+		return [chunk.mesh];
 	}
 	var blockFaces = [
 		[[-1, 38, 38, 38, 38, -1]], 	// grassy dirt grass sides
@@ -803,7 +806,7 @@ function eulerToMat(euler) {
 	return mat;
 }
 
-function drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, model, camPos, camRot, sky) {
+function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -820,13 +823,10 @@ function drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, 
 	mat4.rotate(mvMatrix, degToRad(camRot[2]), [0, 0, 1]);
 	mat4.translate(mvMatrix, vec3.subtract(vec3.create(), camPos));
 
-	gl.activeTexture(gl.TEXTURE0);
-	gl.bindTexture(gl.TEXTURE_2D, terrainTexture);
-	gl.activeTexture(gl.TEXTURE1);
-	gl.bindTexture(gl.TEXTURE_2D, itemTexture);
-	gl.activeTexture(gl.TEXTURE2);
-	gl.bindTexture(gl.TEXTURE_2D, skinTexture);
-	
+	for(var tex in textures) {
+		gl.activeTexture(gl["TEXTURE" + tex]);
+		gl.bindTexture(gl.TEXTURE_2D, textures[tex]);
+	}
 
 	gl.uniform1i(shaderProgram.alphaUniform, false);
 	gl.uniform3fv(shaderProgram.skyDirUniform, vec3.create(mat4.multiplyVec4(mvMatrix, [sky[0][0], sky[0][1], sky[0][2], 0])));
@@ -898,8 +898,6 @@ function skinViewer(filename) {
 	var terrainTexture = initTexture(gl, "terrain.png");
 	var itemTexture = initTexture(gl, "items.png");
 
-	var model = new Array();
-
 	var selector = {
 		vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0,  1, 1, 0,  0, 0, 1,  1, 0, 1,  0, 1, 1,  1, 1, 1],
 		matColors: [0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0],
@@ -912,18 +910,12 @@ function skinViewer(filename) {
 		rotation: [0, 0, 1, 0],
 		scale: [1.01, 1.01, 1.01]
 	};
-	model.push(initObjectBuffers(gl, selector, "selector"));
+	var selectorBuffers = new Array();
+	selectorBuffers.push(initObjectBuffers(gl, selector, "selector"));
 	selector.scale = [0.01, 0.01, 0.01];
-	model.push(initObjectBuffers(gl, selector, "selector"));
+	selectorBuffers.push(initObjectBuffers(gl, selector, "selector"));
 
 	var world = new World(gl);
-	for(var x = -1; x < 2; x++) {
-		for(var y = -1; y < 2; y++) {
-			var start = [x * 16, 0, y * 16];
-			var end = vec3.add([16, 128, 16], start);
-			model.push(world.generateMesh({min: start, max: end}, gl));
-		}
-	}
 
 	/*model.push(initObjectBuffers(gl, Mesh.Head, "head"));
 	model.push(initObjectBuffers(gl, Mesh.Mask, "mask"));
@@ -934,14 +926,13 @@ function skinViewer(filename) {
 	model.push(initObjectBuffers(gl, Mesh.LegRight, "legr"));
 	model.push(initObjectBuffers(gl, Mesh.Item, "item"));*/
 
-	gl.clearColor(0.0, 0.0, 0.0, 1.0);
+	gl.clearColor(0.0, 0.5, 1.0, 1.0);
 	gl.enable(gl.DEPTH_TEST);
 
 	var sky = [
 		vec3.create([0.707, -0.707, 0]), // direction
 		vec3.create([1, 0.5, 0]), // diffuse
-		//vec3.create([0.2, 0.2, 0.5]) // ambient
-		vec3.create([1, 1, 1])
+		vec3.create([1, 1, 1]) //vec3.create([0.2, 0.2, 0.5]) // ambient
 	];
 
 	//var camPos = [-20, 50, 30];
@@ -1035,17 +1026,26 @@ function skinViewer(filename) {
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
 		// change the position of the selector
 		if(selectedBlock) {
-			model[0].location = vec3.subtract(vec3.create(selectedBlock[0]), [0.005, 0.005, 0.005]);
-			model[1].location = vec3.subtract(vec3.add(vec3.create(selectedBlock[0]), selectedBlock[1]), [0.005, 0.005, 0.005]);
+			selectorBuffers[0].location = vec3.subtract(vec3.create(selectedBlock[0]), [0.005, 0.005, 0.005]);
+			selectorBuffers[1].location = vec3.subtract(vec3.add(vec3.create(selectedBlock[0]), selectedBlock[1]), [0.005, 0.005, 0.005]);
 		}else{
-			model[0].location = [0, 0, 0];
-			model[1].location = [0, 0, 0];
+			selectorBuffers[0].location = [0, 0, 0];
+			selectorBuffers[1].location = [0, 0, 0];
 		}
 		if(selectedBlock)
 			document.getElementById("selBlock").innerText = selectedBlock.slice(0, 3);
 
-		world.flushMeshes();
-		drawScene(gl, shaderProgram, terrainTexture, skinTexture, itemTexture, model, vec3.add([0, 0.65, 0], world.entities[0].pos), camRot, sky);
+		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
+		var model = new Array();
+		for(var x = -1; x < 2; x++) {
+			for(var z = -1; z < 2; z++) {
+				var gx = world.entities[0].pos[0] + 16 * x;
+				var gz = world.entities[0].pos[2] + 16 * z;
+				model = model.concat(world.getChunkMeshes(gx, 0, gz));
+			}
+		}
+		model = model.concat(selectorBuffers);
+		drawScene(gl, shaderProgram, [terrainTexture, skinTexture, itemTexture], model, camPos, camRot, sky);
 
 		var timeNow = new Date().getTime();
 		if(lastTime != 0) {
