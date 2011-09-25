@@ -329,6 +329,34 @@ function World(gl) {
 		return block == 6;
 	}
 	function addLight(pos, value, channel) {
+		if(value < getData(pos[0], pos[1], pos[2], channel))
+			return; // can't "add" light to somewhere that's already brighter
+		// breadth first search fill to minimize wasted writes
+		var cellStack = new Array();
+		cellStack.push([pos, value]);
+		setData(pos[0], pos[1], pos[2], channel, value);
+		while(cellStack.length > 0) {
+			var cur = cellStack.shift();
+			pos = cur[0];
+			value = cur[1];
+			for(var i in faceNormals) {
+				var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
+				var adjOpac = opacity(getData(adjPos[0], adjPos[1], adjPos[2], "blocks"));
+				var adjValue = getData(adjPos[0], adjPos[1], adjPos[2], channel);
+				var nextValue = value - adjOpac - 1;
+				if(adjOpac == 0 && i == 5 && value == MAX_LIGHT && channel == "skyLight" && value > adjValue) {
+					nextValue = value;
+					cellStack.unshift([adjPos, nextValue]); // descending skyLight goes to the front of the queue
+				} else if(nextValue > adjValue) {
+					cellStack.push([adjPos, nextValue]);
+				} else {
+					continue;
+				}
+				// set the target light level to prevent other blocks from queueing the same update
+				setData(adjPos[0], adjPos[1], adjPos[2], channel, nextValue);
+			}
+		}
+		/*
 		setData(pos[0], pos[1], pos[2], channel, value);
 		for(var i in faceNormals) {
 			var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
@@ -340,6 +368,7 @@ function World(gl) {
 			if(nextValue > adjValue)
 				addLight(adjPos, nextValue, channel);
 		}
+		*/
 	}
 	function removeLight(pos, channel, notFirst) {
 		var locLight = getData(pos[0], pos[1], pos[2], channel);
