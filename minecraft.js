@@ -191,8 +191,6 @@ function World(gl) {
 			var i = Math.floor(x / REND_CUBE_SIZE) + 
 				Math.floor(y / REND_CUBE_SIZE) * REND_CUBES_X + 
 				Math.floor(z / REND_CUBE_SIZE) * REND_CUBES_X * REND_CUBES_Y;
-			if(i > 63 || i < 0)
-				console.log("ERORORORORORO");
 			dirtyFlags[i] = true;
 		}
 
@@ -296,7 +294,8 @@ function World(gl) {
 	function drawSelfAdj(block) {
 		// this attribute is used for drawing only
 		// special case for leaves
-		return block != 18; // leaves
+		return block == 0       // grass sides are 0, and must be drawn bordering air
+			|| block == 18; // leaves
 	}
 	function physical(block) {
 		return block > 0 && block != 6;
@@ -632,12 +631,12 @@ function World(gl) {
 		}
 	}
 	function addBlock(x, y, z, block, output, bounds) {
+		var data = getData(x, y, z, "data");
 		for(var face in faceNormals) {
-			var data = getData(x, y, z, "data");
 			var id = faceId(block, face, data);
 			var norm = faceNormals[face];
 			var adjBlock = getData(x + norm[0], y + norm[1], z + norm[2], "blocks");
-			if(solid(adjBlock) || (drawSelfAdj(block) && adjBlock == block) || id == -1)
+			if(solid(adjBlock) || (adjBlock == block && !drawSelfAdj(block)) || id == -1)
 				continue;
 			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
@@ -975,7 +974,7 @@ function skinViewer(filename) {
 		return null;
 	var shaderProgram = initShaders(gl);
 	var skinTexture = initTexture(gl, filename);
-	var terrainTexture = initTexture(gl, "terrain.png");
+	var terrainTexture = initTexture(gl, "terrain_default.png");
 	var itemTexture = initTexture(gl, "items.png");
 
 	var selector = {
