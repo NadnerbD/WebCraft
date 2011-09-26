@@ -159,13 +159,75 @@ function World(gl) {
 	// 6 octaves, max feature size of 128
 	var terrainNoise = new Noise(6, 128);
 	function Chunk(coord) {
-		this.coord = coord;
-		this.dirty = false;
-		this.mesh = null;
-		this.data = new Array();
-		this.blocks = new Array();
-		this.skyLight = new Array();
-		this.blockLight = new Array();
+		// init locals
+		var self = this;
+		var coord = coord;
+		var chunkLen = CHUNK_WIDTH_X * CHUNK_WIDTH_Y * CHUNK_WIDTH_Z;
+		var REND_CUBE_SIZE = 8;
+		var REND_CUBES_X = CHUNK_WIDTH_X / REND_CUBE_SIZE;
+		var REND_CUBES_Y = CHUNK_WIDTH_Y / REND_CUBE_SIZE;
+		var REND_CUBES_Z = CHUNK_WIDTH_Z / REND_CUBE_SIZE;
+		var meshCount = REND_CUBES_X * REND_CUBES_Y * REND_CUBES_Z;
+		var dirtyFlags = new Array(meshCount);
+		var meshes = new Array(meshCount);
+
+		this.data = new Array(chunkLen);
+		this.blocks = new Array(chunkLen);
+		this.skyLight = new Array(chunkLen);
+		this.blockLight = new Array(chunkLen);
+
+		function coToI(x, y, z) {
+			return y + (z * CHUNK_WIDTH_Y + (x * CHUNK_WIDTH_Y * CHUNK_WIDTH_Z));
+		}
+
+		function clear() {
+			for(var i = 0; i < meshCount; i++) {
+				dirtyFlags[i] = false;
+			}
+		}
+
+		function touch(x, y, z) {
+			// takes chunk local coord and marks meshes as dirty
+			var i = Math.floor(x / REND_CUBE_SIZE) + 
+				Math.floor(y / REND_CUBE_SIZE) * REND_CUBES_X + 
+				Math.floor(z / REND_CUBE_SIZE) * REND_CUBES_X * REND_CUBES_Y;
+			if(i > 63 || i < 0)
+				console.log("ERORORORORORO");
+			dirtyFlags[i] = true;
+		}
+
+		this.getData = function(x, y, z, channel) {
+			return self[channel][coToI(x, y, z)];
+		}
+
+		this.setData = function(x, y, z, channel, data) {
+			self[channel][coToI(x, y, z)] = data;
+			touch(x, y, z);
+		}
+
+		this.getMeshes = function(world) {
+			for(var z = 0; z < REND_CUBES_Z; z++) {
+				for(var y = 0; y < REND_CUBES_Y; y++) {
+					for(var x = 0; x < REND_CUBES_X; x++) {
+						var gc = [coord[0] * CHUNK_WIDTH_X, coord[1] * CHUNK_WIDTH_Y, coord[2] * CHUNK_WIDTH_Z];
+						var min = [x * REND_CUBE_SIZE + gc[0], y * REND_CUBE_SIZE + gc[1], z * REND_CUBE_SIZE + gc[2]];
+						var bounds = {
+							min: min,
+							max: [min[0] + REND_CUBE_SIZE, min[1] + REND_CUBE_SIZE, min[2] + REND_CUBE_SIZE],
+						};
+						var i = x + y * REND_CUBES_X + z * REND_CUBES_X * REND_CUBES_Y;
+						if(meshes[i] == undefined)
+							meshes[i] = world.generateMesh(bounds);
+						else if(dirtyFlags[i] == true)
+							world.generateMesh(bounds, meshes[i]);
+					}
+				}
+			}
+			clear();
+			return meshes;
+		}
+
+		// initialization code
 		for(var x = 0; x < CHUNK_WIDTH_X; x++) {
 			var globx = x + coord[0] * CHUNK_WIDTH_X;
 			for(var y = 0; y < CHUNK_WIDTH_Y; y++) {
@@ -180,6 +242,7 @@ function World(gl) {
 				}
 			}
 		}
+
 		for(var x = 0; x < CHUNK_WIDTH_X; x++) {
 			for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
 				var depth = 0;
@@ -198,6 +261,7 @@ function World(gl) {
 				}
 			}
 		}
+
 	}
 
 	// the following set of functions are my terrible hax to get
@@ -253,9 +317,6 @@ function World(gl) {
 			layer[cz] = new Chunk([cx, cy, cz]);
 		return layer[cz];
 	}
-	function coToI(x, y, z) {
-		return y + (z * CHUNK_WIDTH_Y + (x * CHUNK_WIDTH_Y * CHUNK_WIDTH_Z));
-	}
 	function locOfs(x, size) {
 		var ofs = x % size;
 		if(ofs < 0)
@@ -267,24 +328,16 @@ function World(gl) {
 		var chunk = getChunk(x, y, z);
 		if(!chunk)
 			return def;
-		return chunk[channel][coToI(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z))];
+		return chunk.getData(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z), channel);
 	}
 	function setData(x, y, z, channel, data) {
 		var chunk = getChunk(x, y, z);
-		if(chunk) {
-			chunk[channel][coToI(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z))] = data;
-			chunk.dirty = true;
-		}
+		if(chunk)
+			chunk.setData(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z), channel, data);
 	}
 	this.getChunkMeshes = function (x, y, z) {
 		var chunk = getChunk(x, y, z);
-		if(chunk.dirty || !chunk.mesh) {
-			var gc = [chunk.coord[0] * CHUNK_WIDTH_X, chunk.coord[1] * CHUNK_WIDTH_Y, chunk.coord[2] * CHUNK_WIDTH_Z];
-			console.log("generating mesh at " + gc);
-			self.generateMesh({min: gc, max: [gc[0] + CHUNK_WIDTH_X, gc[1] + CHUNK_WIDTH_Y, gc[2] + CHUNK_WIDTH_Z]});
-			chunk.dirty = false;
-		}
-		return [chunk.mesh];
+		return chunk.getMeshes(self);
 	}
 	var blockFaces = [
 		[[-1, 38, 38, 38, 38, -1]], 	// grassy dirt grass sides
@@ -603,7 +656,7 @@ function World(gl) {
 			}
 		}
 	}
-	this.generateMesh = function(bounds) {
+	this.generateMesh = function(bounds, initMesh) {
 		// this will produce an "object" that can be sent to initObjectBuffers
 		var output = new Object();
 		output.vertices = new Array();
@@ -628,12 +681,10 @@ function World(gl) {
 				}
 			}
 		}
-		var baseChunk = getChunk(bounds.min[0], bounds.min[1], bounds.min[2]);
-		outputBuffer = initObjectBuffers(gl, output, "chunk", baseChunk.mesh);
+		outputBuffer = initObjectBuffers(gl, output, "chunk", initMesh);
 		outputBuffer.location = bounds.min;
 		outputBuffer.rotation = [0, 0, 1, 0];
 		outputBuffer.scale = [1, 1, 1];
-		baseChunk.mesh = outputBuffer;
 		return outputBuffer;
 	}
 	function stepToNextBlock(block, offset, dir) {
