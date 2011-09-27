@@ -186,7 +186,7 @@ function World(gl) {
 			}
 		}
 
-		function touch(x, y, z) {
+		this.touch = function(x, y, z) {
 			// takes chunk local coord and marks meshes as dirty
 			var i = Math.floor(x / REND_CUBE_SIZE) + 
 				Math.floor(y / REND_CUBE_SIZE) * REND_CUBES_X + 
@@ -200,7 +200,6 @@ function World(gl) {
 
 		this.setData = function(x, y, z, channel, data) {
 			self[channel][coToI(x, y, z)] = data;
-			touch(x, y, z);
 		}
 
 		this.getMeshes = function(world) {
@@ -331,8 +330,22 @@ function World(gl) {
 	}
 	function setData(x, y, z, channel, data) {
 		var chunk = getChunk(x, y, z);
-		if(chunk)
+		if(chunk) {
 			chunk.setData(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z), channel, data);
+			touch(x, y, z);
+		}
+	}
+	function touch(x, y, z) {
+		// touches all the blocks surrounding the specified block
+		for(var ox = -1; ox <= 1; ox++) {
+			for(var oy = -1; oy <= 1; oy++) {
+				for(var oz = -1; oz <= 1; oz++) {
+					var gc = vec3.add([x, y, z], [ox, oy, oz]);
+					var chunk = getChunk(gc[0], gc[1], gc[2]);
+					chunk.touch(locOfs(gc[0], CHUNK_WIDTH_X), locOfs(gc[1], CHUNK_WIDTH_Y), locOfs(gc[2], CHUNK_WIDTH_Z));
+				}
+			}
+		}
 	}
 	this.getChunkMeshes = function (x, y, z) {
 		var chunk = getChunk(x, y, z);
@@ -372,7 +385,7 @@ function World(gl) {
 		return blockData[face % blockData.length];
 	}
 	function faceColor(block, face) {
-		if((block == 2 && face == 0) || block == 0)
+		if((block == 2 && face == 0) || block == 0 || block == 18)
 			return [0.5, 1, 0];
 		else
 			return [1, 1, 1];
