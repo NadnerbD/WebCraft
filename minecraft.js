@@ -152,7 +152,7 @@ function World(gl) {
 				vec3.add(ent.vel, vec3.scale(vec3.create(ent.walkForce), flyCoeff));
 			}
 			vec3.add(ent.vel, [0, -9.8 / 320, 0]);
-			ent.onGround = self.sweepBox(ent.box, ent.pos, ent.vel);
+			ent.onGround = self.moveBox(ent.box, ent.pos, ent.vel);
 		}
 	}
 
@@ -746,6 +746,61 @@ function World(gl) {
 			return [block, offset, result.face];
 		else
 			return null;
+	}
+	this.moveBox = function(box, pos, vel) {
+		// alternative to sweepBox, using code based on Prelude to the Chambered
+		// probably similar to minecraft's actual collision system
+		// (also explains the lack of all angled faces in minecraft)
+		// instead of using a fixed number of sub-steps per movement, we use
+		// the bisection method of approximating the collision time, which should
+		// have a significantly better worst-case performance
+		var offset = [locOfs(box[0]), locOfs(box[1]), locOfs(box[2])];
+		function colliding(pos, box) {
+			for(var x = Math.floor(pos[0] - box[0] / 2); x < pos[0] + box[0] / 2; x++) {
+				for(var y = Math.floor(pos[1] - box[1] / 2); y < pos[1] + box[1] / 2; y++) {
+					for(var z = Math.floor(pos[2] - box[2] / 2); z < pos[2] + box[2] / 2; z++) {
+						if(physical(getData(x, y, z, "blocks"))) {
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		}
+		// funny hack that works suprisingly well in a 3d grid of cubes
+		// integrate one axis at a time. This fails to allow sliding on
+		// sloped surfaces, which presumably is why minecraft doesn't have any
+		var hitGround = false;
+		for(var axis = 0; axis < 3; axis++) {
+			var startPos = vec3.create(pos);
+			var endPos = vec3.add(pos, [vel[0] * (axis == 0), vel[1] * (axis == 1), vel[2] * (axis == 2)]);
+			var midPos = vec3.create(endPos);
+			var col = colliding(endPos, box);
+			if(col) {
+				// note: ommitting the second condition here allows you to stick to ceilings by holding space
+				// highly awesome, consider using in future :D
+				if(axis == 1 && vel[axis] < 0)
+					hitGround = true;
+				// bisection should converge on point of collision
+				for(var i = 0; i < 12; i++) {
+					if(col) {
+						endPos[axis] = midPos[axis];
+					}else{
+						startPos[axis] = midPos[axis];
+					}
+					midPos[axis] = (endPos[axis] + startPos[axis]) / 2;
+					col = colliding(endPos, box);
+				}
+				// zero velocity in this axis
+				vel[axis] = 0;
+			}
+			if(col) {
+				pos[axis] = startPos[axis];
+			}else{
+				pos[axis] = endPos[axis];
+			}
+		}
+		return hitGround;
 	}
 	this.sweepBox = function (box, pos, vel) {
 		// box is simply a vector indicating the size of the box
