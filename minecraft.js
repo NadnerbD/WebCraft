@@ -342,7 +342,8 @@ function World(gl) {
 				for(var oz = -1; oz <= 1; oz++) {
 					var gc = vec3.add([x, y, z], [ox, oy, oz]);
 					var chunk = getChunk(gc[0], gc[1], gc[2]);
-					chunk.touch(locOfs(gc[0], CHUNK_WIDTH_X), locOfs(gc[1], CHUNK_WIDTH_Y), locOfs(gc[2], CHUNK_WIDTH_Z));
+					if(chunk)
+						chunk.touch(locOfs(gc[0], CHUNK_WIDTH_X), locOfs(gc[1], CHUNK_WIDTH_Y), locOfs(gc[2], CHUNK_WIDTH_Z));
 				}
 			}
 		}
@@ -782,7 +783,7 @@ function World(gl) {
 				if(axis == 1 && vel[axis] < 0)
 					hitGround = true;
 				// bisection should converge on point of collision
-				for(var i = 0; i < 12; i++) {
+				while(Math.abs(startPos[axis] - endPos[axis]) > 0.0005) {
 					if(col) {
 						endPos[axis] = midPos[axis];
 					}else{
@@ -1083,7 +1084,7 @@ function skinViewer(filename) {
 	];
 
 	//var camPos = [-20, 50, 30];
-	world.entities[0] = new world.Entity([16, 130, 16]);
+	world.entities[0] = new world.Entity([8, 130, 8]);
 	var camRot = [45, 45, 0];
 
 	var lastMousePos = [0, 0];
