@@ -773,32 +773,32 @@ function World(gl) {
 		// sloped surfaces, which presumably is why minecraft doesn't have any
 		var hitGround = false;
 		for(var axis = 0; axis < 3; axis++) {
-			var startPos = vec3.create(pos);
-			var endPos = vec3.add(pos, [vel[0] * (axis == 0), vel[1] * (axis == 1), vel[2] * (axis == 2)]);
-			var midPos = vec3.create(endPos);
-			var col = colliding(endPos, box);
+			var start = pos[axis];
+			var end = start + vel[axis];
+			var checkPt = vec3.create(pos);
+			checkPt[axis] = end;
+			var col = colliding(checkPt, box);
 			if(col) {
 				// note: ommitting the second condition here allows you to stick to ceilings by holding space
 				// highly awesome, consider using in future :D
 				if(axis == 1 && vel[axis] < 0)
 					hitGround = true;
-				// bisection should converge on point of collision
-				while(Math.abs(startPos[axis] - endPos[axis]) > 0.0005) {
-					if(col) {
-						endPos[axis] = midPos[axis];
-					}else{
-						startPos[axis] = midPos[axis];
-					}
-					midPos[axis] = (endPos[axis] + startPos[axis]) / 2;
-					col = colliding(endPos, box);
-				}
 				// zero velocity in this axis
 				vel[axis] = 0;
-			}
-			if(col) {
-				pos[axis] = startPos[axis];
+				// bisection should converge on point of collision
+				do {
+					var mid = (start + end) / 2;
+					checkPt[axis] = mid;
+					col = colliding(checkPt, box);
+					if(col) {
+						end = mid;
+					}else{
+						start = mid;
+					}
+				}while(Math.abs(start - end) > 0.0005);
+				pos[axis] = start;
 			}else{
-				pos[axis] = endPos[axis];
+				pos[axis] = end;
 			}
 		}
 		return hitGround;
