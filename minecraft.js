@@ -299,6 +299,7 @@ function World(gl) {
 	function physical(block) {
 		return block > 0 && block != 6;
 	}
+	var dontCreate = false;
 	function getChunk(x, y, z) {
 		var cx = Math.floor(x / CHUNK_WIDTH_X);
 		var cy = Math.floor(y / CHUNK_WIDTH_Y);
@@ -312,8 +313,12 @@ function World(gl) {
 			row[cy] = new Array();
 		var layer = row[cy];
 		if(!layer[cz]) {
+			if(dontCreate)
+				return null;
+			dontCreate = true;
 			layer[cz] = new Chunk([cx, cy, cz]);
 			initLight(cx, cy, cz);
+			dontCreate = false;
 		}
 		return layer[cz];
 	}
