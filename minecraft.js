@@ -234,7 +234,7 @@ function World(gl) {
 					var blockValue = terrainNoise.sample(globx, globy, globz) - ((globy - 64) / 256) > 0.5;
 					this.data[coToI(x, y, z)] = 0; // metadata value
 					this.blocks[coToI(x, y, z)] = blockValue * 1; // stone
-					this.skyLight[coToI(x, y, z)] = !blockValue * MAX_LIGHT;
+					this.skyLight[coToI(x, y, z)] = 0;
 					this.blockLight[coToI(x, y, z)] = 0;
 				}
 			}
@@ -311,9 +311,24 @@ function World(gl) {
 		if(!row[cy])
 			row[cy] = new Array();
 		var layer = row[cy];
-		if(!layer[cz])
+		if(!layer[cz]) {
 			layer[cz] = new Chunk([cx, cy, cz]);
+			initLight(cx, cy, cz);
+		}
 		return layer[cz];
+	}
+	function initLight(cx, cy, cz) {
+		var ofsx = cx * CHUNK_WIDTH_X;
+		var ofsy = cy * CHUNK_WIDTH_Y;
+		var ofsz = cz * CHUNK_WIDTH_Z;
+		var lights = new Array();
+		var y = ofsy + CHUNK_WIDTH_Y - 1;
+		for(var z = ofsz; z < CHUNK_WIDTH_Z + ofsz; z++) {
+			for(var x = ofsx; x < CHUNK_WIDTH_X + ofsx; x++) {
+				lights.push([[x, y, z], MAX_LIGHT]);
+			}
+		}
+		addLights(lights, 'skyLight');
 	}
 	function locOfs(x, size) {
 		var ofs = x % size;
