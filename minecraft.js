@@ -394,13 +394,18 @@ function World(gl) {
 	function isCross(block) {
 		return block == 6;
 	}
-	function addLight(pos, value, channel) {
-		if(value < getData(pos[0], pos[1], pos[2], channel))
-			return; // can't "add" light to somewhere that's already brighter
-		// breadth first search fill to minimize wasted writes
+	function addLights(lights, channel) {
+		// lights is an array of [pos, value] pairs
 		var cellStack = new Array();
-		cellStack.push([pos, value]);
-		setData(pos[0], pos[1], pos[2], channel, value);
+		for(var light in lights) {
+			var pos = lights[light][0];
+			var value = lights[light][1];
+			if(value >= getData(pos[0], pos[1], pos[2], channel)) {
+				cellStack.push([pos, value]); // can't "add" light to somewhere that's already brighter
+				setData(pos[0], pos[1], pos[2], channel, value);
+			}
+		}
+		// breadth first search fill to minimize wasted writes
 		while(cellStack.length > 0) {
 			var cur = cellStack.shift();
 			pos = cur[0];
@@ -422,19 +427,6 @@ function World(gl) {
 				setData(adjPos[0], adjPos[1], adjPos[2], channel, nextValue);
 			}
 		}
-		/*
-		setData(pos[0], pos[1], pos[2], channel, value);
-		for(var i in faceNormals) {
-			var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
-			var adjOpac = opacity(getData(adjPos[0], adjPos[1], adjPos[2], "blocks"));
-			var adjValue = getData(adjPos[0], adjPos[1], adjPos[2], channel);
-			var nextValue = value - adjOpac - 1;
-			if(adjOpac == 0 && i == 5 && value == MAX_LIGHT && channel == "skyLight")
-				nextValue = value;
-			if(nextValue > adjValue)
-				addLight(adjPos, nextValue, channel);
-		}
-		*/
 	}
 	function removeLight(pos, channel, notFirst) {
 		var locLight = getData(pos[0], pos[1], pos[2], channel);
@@ -449,9 +441,7 @@ function World(gl) {
 		}
 		if(!notFirst) {
 			var lights = findLight(pos, channel);
-			for(var i in lights) {
-				addLight(lights[i][0], lights[i][1], channel);
-			}
+			addLights(lights, channel);
 		}
 	}
 	function findLight(pos, channel, result) {
@@ -473,11 +463,13 @@ function World(gl) {
 	}
 	function touchLight(pos, channel) {
 		setData(pos[0], pos[1], pos[2], channel, 0);
+		var lights = new Array();
 		for(var i in faceNormals) {
 			var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
 			var adjValue = getData(adjPos[0], adjPos[1], adjPos[2], channel);
-			addLight(adjPos, adjValue, channel);
+			lights.push([adjPos, adjValue]);
 		}
+		addLights(lights, channel);
 	}
 	this.setBlock = function(pos, block) {
 		// if there is already an emissive block here, remove it's light
@@ -499,7 +491,7 @@ function World(gl) {
 			touchLight(pos, "blockLight");
 		}
 		if(emit(block) > 0)
-			addLight(pos, emit(block), "blockLight");
+			addLights([[pos, emit(block)]], "blockLight");
 	}
 	// four verts per face
 	var faceNormals = [
