@@ -122,7 +122,7 @@ function initTexture(gl, filename) {
 
 
 function World(gl) {
-	var chunks = new Array();
+	var chunks = new Object();
 	var CHUNK_WIDTH_X = 16;
 	var CHUNK_WIDTH_Y = 128;
 	var CHUNK_WIDTH_Z = 16;
@@ -156,9 +156,17 @@ function World(gl) {
 		}
 	}
 
-	// 6 octaves, max feature size of 128
-	var terrainNoise = new Noise(6, 128);
-	function Chunk(coord) {
+	var chunkGenerator = new Worker('chunkGenerator.js');
+	var noCreate = false;
+	// add chunks to chunk list when we recieve them from the generator
+	chunkGenerator.onmessage = function(msg) {
+		noCreate = true;
+		chunks[msg.data[0]] = new Chunk(msg.data[0], msg.data[1]);
+		//initLight(msg.data[0]);
+		noCreate = false;
+	};
+
+	function Chunk(coord, data) {
 		// init locals
 		var self = this;
 		var coord = coord;
@@ -168,22 +176,16 @@ function World(gl) {
 		var REND_CUBES_Y = CHUNK_WIDTH_Y / REND_CUBE_SIZE;
 		var REND_CUBES_Z = CHUNK_WIDTH_Z / REND_CUBE_SIZE;
 		var meshCount = REND_CUBES_X * REND_CUBES_Y * REND_CUBES_Z;
-		var dirtyFlags = new Array(meshCount);
 		var meshes = new Array(meshCount);
+		var dirtyFlags = new Array(meshCount);
 
-		this.data = new Array(chunkLen);
-		this.blocks = new Array(chunkLen);
-		this.skyLight = new Array(chunkLen);
-		this.blockLight = new Array(chunkLen);
+		this.data = data.data;
+		this.blocks = data.blocks;
+		this.skyLight = data.skyLight;
+		this.blockLight = data.blockLight;
 
 		function coToI(x, y, z) {
 			return y + (z * CHUNK_WIDTH_Y + (x * CHUNK_WIDTH_Y * CHUNK_WIDTH_Z));
-		}
-
-		function clear() {
-			for(var i = 0; i < meshCount; i++) {
-				dirtyFlags[i] = false;
-			}
 		}
 
 		this.touch = function(x, y, z) {
@@ -203,6 +205,17 @@ function World(gl) {
 		}
 
 		this.getMeshes = function(world) {
+			var y = 0;
+			for(var z = -1; z < 2; z++) {
+				for(var x = -1; x < 2; x++) {
+					if(getChunk(
+						(coord[0] + x) * CHUNK_WIDTH_X,
+						(coord[1] + y) * CHUNK_WIDTH_Y,
+						(coord[2] + z) * CHUNK_WIDTH_Z
+					) == undefined)
+						return []; // don't generate meshes for this chunk until the neighboring chunks have been created
+				}
+			}
 			for(var z = 0; z < REND_CUBES_Z; z++) {
 				for(var y = 0; y < REND_CUBES_Y; y++) {
 					for(var x = 0; x < REND_CUBES_X; x++) {
@@ -213,52 +226,20 @@ function World(gl) {
 							max: [min[0] + REND_CUBE_SIZE, min[1] + REND_CUBE_SIZE, min[2] + REND_CUBE_SIZE],
 						};
 						var i = x + y * REND_CUBES_X + z * REND_CUBES_X * REND_CUBES_Y;
-						if(meshes[i] == undefined)
-							meshes[i] = world.generateMesh(bounds);
-						else if(dirtyFlags[i] == true)
-							world.generateMesh(bounds, meshes[i]);
+						if(meshes[i] == undefined) {
+							mesh = world.generateMesh(bounds);
+							if(mesh != undefined)
+								meshes[i] = mesh;
+						}else if(dirtyFlags[i] == true) {
+							if(world.generateMesh(bounds, meshes[i]) != undefined) {
+								dirtyFlags[i] = false;
+							}
+						}
 					}
 				}
 			}
-			clear();
 			return meshes;
 		}
-
-		// initialization code
-		for(var x = 0; x < CHUNK_WIDTH_X; x++) {
-			var globx = x + coord[0] * CHUNK_WIDTH_X;
-			for(var y = 0; y < CHUNK_WIDTH_Y; y++) {
-				var globy = y + coord[1] * CHUNK_WIDTH_Y;
-				for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
-					var globz = z + coord[2] * CHUNK_WIDTH_Z;
-					var blockValue = terrainNoise.sample(globx, globy, globz) - ((globy - 64) / 256) > 0.5;
-					this.data[coToI(x, y, z)] = 0; // metadata value
-					this.blocks[coToI(x, y, z)] = blockValue * 1; // stone
-					this.skyLight[coToI(x, y, z)] = 0;
-					this.blockLight[coToI(x, y, z)] = 0;
-				}
-			}
-		}
-
-		for(var x = 0; x < CHUNK_WIDTH_X; x++) {
-			for(var z = 0; z < CHUNK_WIDTH_Z; z++) {
-				var depth = 0;
-				for(var y = CHUNK_WIDTH_Y - 1; y >= 0; y--) {
-					var block = this.blocks[coToI(x, y, z)];
-					if(block == 0)
-						depth = 0;
-					else
-						depth++;
-					if(depth == 1)
-						this.blocks[coToI(x, y, z)] = 2; // grassy dirt
-					if(depth > 1 && depth <= 4)
-						this.blocks[coToI(x, y, z)] = 3; // dirt
-					if(y == 0)
-						this.blocks[coToI(x, y, z)] = 7; // bedrock
-				}
-			}
-		}
-
 	}
 
 	// the following set of functions are my terrible hax to get
@@ -299,33 +280,28 @@ function World(gl) {
 	function physical(block) {
 		return block > 0 && block != 6;
 	}
-	var dontCreate = false;
 	function getChunk(x, y, z) {
 		var cx = Math.floor(x / CHUNK_WIDTH_X);
 		var cy = Math.floor(y / CHUNK_WIDTH_Y);
 		var cz = Math.floor(z / CHUNK_WIDTH_Z);
 		if(cy != 0)
-			return null;
-		if(!chunks[cx])
-			chunks[cx] = new Array();
-		var row = chunks[cx];
-		if(!row[cy])
-			row[cy] = new Array();
-		var layer = row[cy];
-		if(!layer[cz]) {
-			if(dontCreate)
-				return null;
-			dontCreate = true;
-			layer[cz] = new Chunk([cx, cy, cz]);
-			initLight(cx, cy, cz);
-			dontCreate = false;
+			return undefined;
+		var coord = [cx, cy, cz];
+		var chunk = chunks[coord];
+		if(chunk == undefined) {
+			if(noCreate)
+				return undefined;
+			chunkGenerator.postMessage(coord);
+			chunks[coord] = {coord: "queued"};
+		}else if(chunk.coord == "queued") {
+			return undefined;
 		}
-		return layer[cz];
+		return chunk;
 	}
-	function initLight(cx, cy, cz) {
-		var ofsx = cx * CHUNK_WIDTH_X;
-		var ofsy = cy * CHUNK_WIDTH_Y;
-		var ofsz = cz * CHUNK_WIDTH_Z;
+	function initLight(coord) {
+		var ofsx = coord[0] * CHUNK_WIDTH_X;
+		var ofsy = coord[1] * CHUNK_WIDTH_Y;
+		var ofsz = coord[2] * CHUNK_WIDTH_Z;
 		var lights = new Array();
 		var y = ofsy + CHUNK_WIDTH_Y - 1;
 		for(var z = ofsz; z < CHUNK_WIDTH_Z + ofsz; z++) {
@@ -370,6 +346,8 @@ function World(gl) {
 	}
 	this.getChunkMeshes = function (x, y, z) {
 		var chunk = getChunk(x, y, z);
+		if(chunk == undefined || chunk.coord == "queued")
+			return [];
 		return chunk.getMeshes(self);
 	}
 	var blockFaces = [
@@ -681,7 +659,15 @@ function World(gl) {
 			}
 		}
 	}
+
+	var MESH_TIME_PER_FRAME = 20;
+	this.meshGenTime = 0;
+	this.meshesGenerated = 0;
 	this.generateMesh = function(bounds, initMesh) {
+		if(!(self.meshGenTime < MESH_TIME_PER_FRAME))
+			return undefined;
+		this.meshesGenerated++;
+		startTime = new Date().getTime();
 		// this will produce an "object" that can be sent to initObjectBuffers
 		var output = new Object();
 		output.vertices = new Array();
@@ -710,6 +696,7 @@ function World(gl) {
 		outputBuffer.location = bounds.min;
 		outputBuffer.rotation = [0, 0, 1, 0];
 		outputBuffer.scale = [1, 1, 1];
+		self.meshGenTime += new Date().getTime() - startTime;
 		return outputBuffer;
 	}
 	function stepToNextBlock(block, offset, dir) {
@@ -1181,6 +1168,8 @@ function skinViewer(filename) {
 	var dayRot = 0;
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
+	// number of chunks from the current chunk to display
+	var DRAW_DIST = 2;
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
@@ -1197,8 +1186,10 @@ function skinViewer(filename) {
 
 		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
 		var model = new Array();
-		for(var x = -1; x < 2; x++) {
-			for(var z = -1; z < 2; z++) {
+		world.meshGenTime = 0;
+		world.meshesGenerated = 0;
+		for(var x = 0 - DRAW_DIST; x < 1 + DRAW_DIST; x++) {
+			for(var z = 0 - DRAW_DIST; z < 1 + DRAW_DIST; z++) {
 				var gx = world.entities[0].pos[0] + 16 * x;
 				var gz = world.entities[0].pos[2] + 16 * z;
 				model = model.concat(world.getChunkMeshes(gx, 0, gz));
