@@ -162,6 +162,7 @@ function World(gl) {
 	chunkGenerator.onmessage = function(msg) {
 		noCreate = true;
 		chunks[msg.data[0]] = new Chunk(msg.data[0], msg.data[1]);
+		// these updates take a massively long time for some reason
 		//initLight(msg.data[0]);
 		noCreate = false;
 	};
@@ -1169,7 +1170,7 @@ function skinViewer(filename) {
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
 	// number of chunks from the current chunk to display
-	var DRAW_DIST = 2;
+	var DRAW_DIST = 4;
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
@@ -1188,11 +1189,15 @@ function skinViewer(filename) {
 		var model = new Array();
 		world.meshGenTime = 0;
 		world.meshesGenerated = 0;
-		for(var x = 0 - DRAW_DIST; x < 1 + DRAW_DIST; x++) {
-			for(var z = 0 - DRAW_DIST; z < 1 + DRAW_DIST; z++) {
-				var gx = world.entities[0].pos[0] + 16 * x;
-				var gz = world.entities[0].pos[2] + 16 * z;
-				model = model.concat(world.getChunkMeshes(gx, 0, gz));
+		for(var d = 0; d <= DRAW_DIST; d++) {
+			for(var x = 0 - d; x < 1 + d; x++) {
+				for(var z = 0 - d; z < 1 + d; z++) {
+					if(Math.abs(x) == d || Math.abs(z) == d) {
+						var gx = world.entities[0].pos[0] + 16 * x;
+						var gz = world.entities[0].pos[2] + 16 * z;
+						model = model.concat(world.getChunkMeshes(gx, 0, gz));
+					}
+				}
 			}
 		}
 		model = model.concat(selectorBuffers);
