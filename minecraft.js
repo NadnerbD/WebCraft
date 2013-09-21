@@ -30,7 +30,7 @@ varying vec3 vVertexColor; \n\
 uniform sampler2D uSampler; \n\
 uniform bool uEnableAlpha; \n\
 void main(void) { \n\
-	gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t)) * vec4(vVertexColor, 1.0); \n\
+	gl_FragColor = texture2D(uSampler, vTextureCoord) * vec4(vVertexColor, 1.0); \n\
 	if(gl_FragColor.a < 0.9 || (uEnableAlpha && gl_FragColor == texture2D(uSampler, vec2(0.0, 0.0)))) \n\
 		discard; \n\
 } \n\
@@ -38,7 +38,7 @@ void main(void) { \n\
 
 function initGL(canvas) {
 	try {
-		var gl = canvas.getContext("experimental-webgl");
+		var gl = canvas.getContext("experimental-webgl", {antialias: false});
 		gl.viewportWidth = canvas.width;
 		gl.viewportHeight = canvas.height;
 	} catch (e) {

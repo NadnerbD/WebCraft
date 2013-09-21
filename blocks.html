@@ -4,8 +4,17 @@
 		<script type="text/javascript" src="Mesh.js"></script>
 		<script type="text/javascript" src="noise.js"></script>
 		<script type="text/javascript" src="minecraft.js"></script>
+		<script type="text/javascript">
+			function init() {
+				var elem = document.getElementById("start")
+				var listener = elem.addEventListener("click", function (event) {
+					document.body.appendChild(skinViewer('Nadnerb.png'));
+					elem.disabled = true;
+				}, false);
+			}
+		</script>
 	</head>
-	<body>
+	<body onload="init()">
 	wasd to move, e and q to add and remove blocks, space to jump, and click and drag to rotate the view
 	<select id="blockType">
 		<option value="1">Stone</option>
@@ -28,7 +37,7 @@
 		<option value="89">Lightstone</option>
 	</select>
 	<br/>
-	<input type="button" value="start" onclick="event.srcElement.disabled = true;event.srcElement.onclick = undefined;document.body.appendChild(skinViewer('Nadnerb.png'));"/>
+	<input type="button" value="start" id="start"/>
 	Selected Block: <span id="selBlock"></span> 
 	<br/>
 	</body>
