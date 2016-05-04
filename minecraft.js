@@ -127,6 +127,10 @@ function World(gl) {
 	var CHUNK_WIDTH_Y = 128;
 	var CHUNK_WIDTH_Z = 16;
 	var CHUNK_SIZE = [CHUNK_WIDTH_X, CHUNK_WIDTH_Y, CHUNK_WIDTH_Z];
+	var REND_CUBE_SIZE = 8;
+	var REND_CUBES_X = CHUNK_WIDTH_X / REND_CUBE_SIZE;
+	var REND_CUBES_Y = CHUNK_WIDTH_Y / REND_CUBE_SIZE;
+	var REND_CUBES_Z = CHUNK_WIDTH_Z / REND_CUBE_SIZE;
 	var MAX_LIGHT = 15;
 	var self = this;
 
@@ -171,11 +175,6 @@ function World(gl) {
 		// init locals
 		var self = this;
 		var coord = coord;
-		var chunkLen = CHUNK_WIDTH_X * CHUNK_WIDTH_Y * CHUNK_WIDTH_Z;
-		var REND_CUBE_SIZE = 8;
-		var REND_CUBES_X = CHUNK_WIDTH_X / REND_CUBE_SIZE;
-		var REND_CUBES_Y = CHUNK_WIDTH_Y / REND_CUBE_SIZE;
-		var REND_CUBES_Z = CHUNK_WIDTH_Z / REND_CUBE_SIZE;
 		var meshCount = REND_CUBES_X * REND_CUBES_Y * REND_CUBES_Z;
 		var meshes = new Array(meshCount);
 		var dirtyFlags = new Array(meshCount);
@@ -203,6 +202,21 @@ function World(gl) {
 
 		this.setData = function(x, y, z, channel, data) {
 			self[channel][coToI(x, y, z)] = data;
+		}
+
+		function neighborsExist() {
+			var y = 0;
+			for(var z = -1; z < 2; z++) {
+				for(var x = -1; x < 2; x++) {
+					if(getChunk(
+						(coord[0] + x) * CHUNK_WIDTH_X,
+						(coord[1] + y) * CHUNK_WIDTH_Y,
+						(coord[2] + z) * CHUNK_WIDTH_Z
+					) == undefined)
+						return false;
+				}
+			}
+			return true;
 		}
 
 		this.getMeshes = function(world) {
@@ -241,6 +255,85 @@ function World(gl) {
 			}
 			return meshes;
 		}
+
+		this.getMesh = function(x, y, z, world) {
+			// inputs are in global REND_CUBE coords
+			// convert to local REND_CUBE coords
+			x = x - coord[0] * REND_CUBES_X;
+			y = y - coord[1] * REND_CUBES_Y;
+			z = z - coord[2] * REND_CUBES_Z;
+
+			// Check if coords are valid
+			if(x < 0 || y < 0 || z < 0 || x >= REND_CUBES_X || y >= REND_CUBES_Y || z >= REND_CUBES_Z) {
+				return undefined;
+			}
+
+			// Check if neighbors exist like above
+			// don't generate meshes for this chunk until the neighboring chunks have been created
+			if(!neighborsExist()) return undefined;
+
+			// get the internal index of the mesh
+			var i = x + y * REND_CUBES_X + z * REND_CUBES_X * REND_CUBES_Y;
+
+			// determine if chunk needs to be (re)generated
+			if(meshes[i] == undefined || dirtyFlags[i] == true) {
+				// this info is only needed if we're regenerating the chunk
+				var gc = [coord[0] * CHUNK_WIDTH_X, coord[1] * CHUNK_WIDTH_Y, coord[2] * CHUNK_WIDTH_Z];
+				var min = [x * REND_CUBE_SIZE + gc[0], y * REND_CUBE_SIZE + gc[1], z * REND_CUBE_SIZE + gc[2]];
+				var bounds = {
+					min: min,
+					max: [min[0] + REND_CUBE_SIZE, min[1] + REND_CUBE_SIZE, min[2] + REND_CUBE_SIZE],
+				};
+
+				if(meshes[i] == undefined) {
+					meshes[i] = world.generateMesh(bounds);
+				}else if(dirtyFlags[i] == true) {
+					if(world.generateMesh(bounds, meshes[i]) != undefined) {
+						dirtyFlags[i] = false;
+					}
+				}
+			}
+
+			// return the mesh
+			return meshes[i];
+		}
+	}
+
+	this.getMeshes = function(x, y, z, drawDist) {
+		// inputs are in global float coords
+		// convert to REND_CUBE coords
+		x = Math.floor(x / REND_CUBE_SIZE);
+		y = Math.floor(y / REND_CUBE_SIZE);
+		z = Math.floor(z / REND_CUBE_SIZE);
+		// get meshes in an expanding cubic pattern starting with those closest to the viewer
+		// until drawDist (an integer radius in units of REND_CUBE_SIZE) is reached
+		// a drawDist of 0 should show only the current chunk
+		var meshes = [];
+		for(var d = 0; d <= drawDist; d++) {
+			for(var dx = 0 - d; dx < 1 + d; dx++) {
+				for(var dy = 0 - d; dy < 1 + d; dy++) {
+					for(var dz = 0 - d; dz < 1 + d; dz++) {
+						if(Math.abs(dx) == d || Math.abs(dy) == d || Math.abs(dz) == d) {
+							var cx = x + dx;
+							var cy = y + dy;
+							var cz = z + dz;
+							var chunk = getChunk(
+								cx * REND_CUBE_SIZE,
+								cy * REND_CUBE_SIZE,
+								cz * REND_CUBE_SIZE
+							);
+							if(chunk != undefined) {
+								var mesh = chunk.getMesh(cx, cy, cz, self);
+								if(mesh != undefined) {
+									meshes.push(mesh);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return meshes;
 	}
 
 	// the following set of functions are my terrible hax to get
@@ -1043,7 +1136,7 @@ function skinViewer(filename) {
 		return null;
 	var shaderProgram = initShaders(gl);
 	var skinTexture = initTexture(gl, filename);
-	var terrainTexture = initTexture(gl, "terrain_default.png");
+	var terrainTexture = initTexture(gl, "terrain.png");
 	var itemTexture = initTexture(gl, "items.png");
 
 	var selector = {
@@ -1170,7 +1263,7 @@ function skinViewer(filename) {
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
 	// number of chunks from the current chunk to display
-	var DRAW_DIST = 4;
+	var DRAW_DIST = 8;
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
@@ -1186,20 +1279,16 @@ function skinViewer(filename) {
 			document.getElementById("selBlock").innerText = selectedBlock.slice(0, 3);
 
 		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
-		var model = new Array();
 		world.meshGenTime = 0;
 		world.meshesGenerated = 0;
-		for(var d = 0; d <= DRAW_DIST; d++) {
-			for(var x = 0 - d; x < 1 + d; x++) {
-				for(var z = 0 - d; z < 1 + d; z++) {
-					if(Math.abs(x) == d || Math.abs(z) == d) {
-						var gx = world.entities[0].pos[0] + 16 * x;
-						var gz = world.entities[0].pos[2] + 16 * z;
-						model = model.concat(world.getChunkMeshes(gx, 0, gz));
-					}
-				}
-			}
-		}
+
+		var model = world.getMeshes(
+			world.entities[0].pos[0],
+			world.entities[0].pos[1],
+			world.entities[0].pos[2],
+			DRAW_DIST
+		);
+
 		model = model.concat(selectorBuffers);
 		drawScene(gl, shaderProgram, [terrainTexture, skinTexture, itemTexture], model, camPos, camRot, sky);
 
