@@ -1180,9 +1180,8 @@ function skinViewer(filename) {
 	world.entities[0] = new world.Entity([8, 130, 8]);
 	var camRot = [45, 45, 0];
 
-	var lastMousePos = [0, 0];
 	function lookFunc(event) {
-		var delta = [event.clientX - lastMousePos[0], event.clientY - lastMousePos[1]];
+		var delta = [event.movementX || event.mozMovementX || 0, event.movementY || event.mozMovementY || 0];
 		camRot[1] += delta[0] * 0.25;
 		camRot[0] += delta[1] * 0.25;
 		if(camRot[0] > 90)
@@ -1191,13 +1190,24 @@ function skinViewer(filename) {
 			camRot[0] = -90;
 		lastMousePos = [event.clientX, event.clientY];
 	}
-	document.addEventListener('mousedown', function(event) {
-		lastMousePos = [event.clientX, event.clientY];
-		document.addEventListener('mousemove', lookFunc, false);
+
+	// prepare the pointer lock functions
+	canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+	canvas.addEventListener('click', function(event) {
+		canvas.requestPointerLock();
 	}, false);
-	document.addEventListener('mouseup', function(event) {
-		document.removeEventListener('mousemove', lookFunc, false);
-	}, false);
+	// enable and disable mouse tracking
+	function lockChange() {
+		if(document.pointerLockElement === canvas ||
+		document.mozPointerLockElement === canvas) {
+			document.addEventListener('mousemove', lookFunc, false);
+		}else{
+			document.removeEventListener('mousemove', lookFunc, false);
+		}
+	}
+	// mozilla hasn't made this standard yet
+	document.addEventListener('pointerlockchange', lockChange, false);
+	document.addEventListener('mozpointerlockchange', lockChange, false);
 
 	var moveDir = [0, 0, 0];
 	document.addEventListener('keydown', function(event) {
