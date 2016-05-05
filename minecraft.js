@@ -1201,7 +1201,7 @@ function main() {
 
 	// prepare the pointer lock functions
 	canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
-	canvas.addEventListener('click', function(event) {
+	document.addEventListener('click', function(event) {
 		canvas.requestPointerLock();
 	}, false);
 	// enable and disable mouse tracking
