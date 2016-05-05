@@ -282,7 +282,8 @@ function World(gl) {
 						}
 					}
 				}else if(dirtyFlags[i] == true) {
-					if(world.generateMesh(bounds, meshPool[meshes[i]]) != undefined) {
+					// we force the update if it's dirty to avoid making holes in the world
+					if(world.generateMesh(bounds, meshPool[meshes[i]], true) != undefined) {
 						dirtyFlags[i] = false;
 					}
 				}
@@ -751,8 +752,8 @@ function World(gl) {
 	var MESH_TIME_PER_FRAME = 20;
 	this.meshGenTime = 0;
 	this.meshesGenerated = 0;
-	this.generateMesh = function(bounds, initMesh) {
-		if(!(self.meshGenTime < MESH_TIME_PER_FRAME))
+	this.generateMesh = function(bounds, initMesh, force) {
+		if(!(self.meshGenTime < MESH_TIME_PER_FRAME) && !force)
 			return undefined;
 		this.meshesGenerated++;
 		startTime = new Date().getTime();
