@@ -206,14 +206,16 @@ function World(gl) {
 			self[channel][coToI(x, y, z)] = data;
 		}
 
-		function neighborsExist() {
+		function neighborsExist(gx, gy, gz) {
+			// checks horizontal area surrounding a global REND_CUBE coord for
+			// chunks within REND_CUBE_SIZE
 			var y = 0;
 			for(var z = -1; z < 2; z++) {
 				for(var x = -1; x < 2; x++) {
 					if(getChunk(
-						(coord[0] + x) * CHUNK_WIDTH_X,
-						(coord[1] + y) * CHUNK_WIDTH_Y,
-						(coord[2] + z) * CHUNK_WIDTH_Z
+						(gx + x) * REND_CUBE_SIZE,
+						(gy + y) * REND_CUBE_SIZE,
+						(gz + z) * REND_CUBE_SIZE
 					) == undefined)
 						return false;
 				}
@@ -222,6 +224,10 @@ function World(gl) {
 		}
 
 		this.getMesh = function(x, y, z, world) {
+			// Check if neighbors exist
+			// don't generate meshes for this chunk until the neighboring chunks have been created
+			if(!neighborsExist(x, y, z)) return undefined;
+
 			// inputs are in global REND_CUBE coords
 			// convert to local REND_CUBE coords
 			x = x - coord[0] * REND_CUBES_X;
@@ -232,10 +238,6 @@ function World(gl) {
 			if(x < 0 || y < 0 || z < 0 || x >= REND_CUBES_X || y >= REND_CUBES_Y || z >= REND_CUBES_Z) {
 				return undefined;
 			}
-
-			// Check if neighbors exist like above
-			// don't generate meshes for this chunk until the neighboring chunks have been created
-			if(!neighborsExist()) return undefined;
 
 			// get the internal index of the mesh
 			var i = x + y * REND_CUBES_X + z * REND_CUBES_X * REND_CUBES_Y;
