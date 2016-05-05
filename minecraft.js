@@ -865,7 +865,8 @@ function World(gl) {
 		// integrate one axis at a time. This fails to allow sliding on
 		// sloped surfaces, which presumably is why minecraft doesn't have any
 		var hitGround = false;
-		for(var axis = 0; axis < 3; axis++) {
+		var order = colliding([vel[0] + pos[0], pos[1], pos[2]], box) ? [2, 0, 1] : [0, 2, 1];
+		for(var axis of order) {
 			var start = pos[axis];
 			var end = start + vel[axis];
 			var checkPt = vec3.create(pos);
