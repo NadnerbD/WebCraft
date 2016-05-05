@@ -853,7 +853,7 @@ function World(gl) {
 			for(var x = Math.floor(pos[0] - box[0] / 2); x < pos[0] + box[0] / 2; x++) {
 				for(var y = Math.floor(pos[1] - box[1] / 2); y < pos[1] + box[1] / 2; y++) {
 					for(var z = Math.floor(pos[2] - box[2] / 2); z < pos[2] + box[2] / 2; z++) {
-						if(physical(getData(x, y, z, "blocks"))) {
+						if(getChunk(x, 0, z) == undefined || physical(getData(x, y, z, "blocks"))) {
 							return true;
 						}
 					}
