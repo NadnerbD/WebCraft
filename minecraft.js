@@ -123,6 +123,8 @@ function initTexture(gl, filename) {
 
 function World(gl) {
 	var chunks = new Object();
+	var meshPool = new Array();
+	var meshPoolUse = new Array();
 	var CHUNK_WIDTH_X = 16;
 	var CHUNK_WIDTH_Y = 128;
 	var CHUNK_WIDTH_Z = 16;
@@ -219,43 +221,6 @@ function World(gl) {
 			return true;
 		}
 
-		this.getMeshes = function(world) {
-			var y = 0;
-			for(var z = -1; z < 2; z++) {
-				for(var x = -1; x < 2; x++) {
-					if(getChunk(
-						(coord[0] + x) * CHUNK_WIDTH_X,
-						(coord[1] + y) * CHUNK_WIDTH_Y,
-						(coord[2] + z) * CHUNK_WIDTH_Z
-					) == undefined)
-						return []; // don't generate meshes for this chunk until the neighboring chunks have been created
-				}
-			}
-			for(var z = 0; z < REND_CUBES_Z; z++) {
-				for(var y = 0; y < REND_CUBES_Y; y++) {
-					for(var x = 0; x < REND_CUBES_X; x++) {
-						var gc = [coord[0] * CHUNK_WIDTH_X, coord[1] * CHUNK_WIDTH_Y, coord[2] * CHUNK_WIDTH_Z];
-						var min = [x * REND_CUBE_SIZE + gc[0], y * REND_CUBE_SIZE + gc[1], z * REND_CUBE_SIZE + gc[2]];
-						var bounds = {
-							min: min,
-							max: [min[0] + REND_CUBE_SIZE, min[1] + REND_CUBE_SIZE, min[2] + REND_CUBE_SIZE],
-						};
-						var i = x + y * REND_CUBES_X + z * REND_CUBES_X * REND_CUBES_Y;
-						if(meshes[i] == undefined) {
-							mesh = world.generateMesh(bounds);
-							if(mesh != undefined)
-								meshes[i] = mesh;
-						}else if(dirtyFlags[i] == true) {
-							if(world.generateMesh(bounds, meshes[i]) != undefined) {
-								dirtyFlags[i] = false;
-							}
-						}
-					}
-				}
-			}
-			return meshes;
-		}
-
 		this.getMesh = function(x, y, z, world) {
 			// inputs are in global REND_CUBE coords
 			// convert to local REND_CUBE coords
@@ -286,16 +251,42 @@ function World(gl) {
 				};
 
 				if(meshes[i] == undefined) {
-					meshes[i] = world.generateMesh(bounds);
+					// we have no mesh object
+					// get one from the pool, or if none are available, create one
+					var poolId = meshPoolUse.indexOf(0);
+					if(poolId == -1) {
+						var newMesh = world.generateMesh(bounds);
+						if(newMesh != undefined) {
+							poolId = meshPool.length;
+							meshPool.push(newMesh);
+
+							meshes[i] = poolId;
+							newMesh.poolId = poolId;
+							newMesh.remove = function() {
+								meshes[i] = undefined;
+							};
+						}
+					}else{
+						var newMesh = world.generateMesh(bounds, meshPool[poolId]);
+						if(newMesh != undefined) {
+							meshPool[poolId].remove();
+
+							meshes[i] = poolId;
+							newMesh.poolId = poolId;
+							newMesh.remove = function() {
+								meshes[i] = undefined;
+							};
+						}
+					}
 				}else if(dirtyFlags[i] == true) {
-					if(world.generateMesh(bounds, meshes[i]) != undefined) {
+					if(world.generateMesh(bounds, meshPool[meshes[i]]) != undefined) {
 						dirtyFlags[i] = false;
 					}
 				}
 			}
 
 			// return the mesh
-			return meshes[i];
+			return meshPool[meshes[i]];
 		}
 	}
 
@@ -309,6 +300,11 @@ function World(gl) {
 		// until drawDist (an integer radius in units of REND_CUBE_SIZE) is reached
 		// a drawDist of 0 should show only the current chunk
 		var meshes = [];
+		// record which meshes get used in this frame
+		// meshes that were not used in the last 2 frames can be reclaimed by new mesh gens
+		for(var i in meshPoolUse) {
+			if(meshPoolUse[i] > 0) meshPoolUse[i] -= 1;
+		}
 		for(var d = 0; d <= drawDist; d++) {
 			for(var dx = 0 - d; dx < 1 + d; dx++) {
 				for(var dy = 0 - d; dy < 1 + d; dy++) {
@@ -326,6 +322,7 @@ function World(gl) {
 								var mesh = chunk.getMesh(cx, cy, cz, self);
 								if(mesh != undefined) {
 									meshes.push(mesh);
+									meshPoolUse[mesh.poolId] = 2;
 								}
 							}
 						}
@@ -437,12 +434,6 @@ function World(gl) {
 				}
 			}
 		}
-	}
-	this.getChunkMeshes = function (x, y, z) {
-		var chunk = getChunk(x, y, z);
-		if(chunk == undefined || chunk.coord == "queued")
-			return [];
-		return chunk.getMeshes(self);
 	}
 	var blockFaces = [
 		[[-1, 38, 38, 38, 38, -1]], 	// grassy dirt grass sides
