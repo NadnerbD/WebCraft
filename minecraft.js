@@ -558,6 +558,9 @@ function World(gl) {
 		}
 		addLights(lights, channel);
 	}
+	this.getBlock = function(pos) {
+		return getData(pos[0], pos[1], pos[2], "blocks");
+	}
 	this.setBlock = function(pos, block) {
 		// if there is already an emissive block here, remove it's light
 		var initBlock = getData(pos[0], pos[1], pos[2], "blocks");
@@ -1223,6 +1226,11 @@ function main() {
 					world.setBlock(selectedBlock[0], 0);
 				}
 				break;
+			case 1: // middle button
+				if(selectedBlock) {
+					document.getElementById("blockType").value = world.getBlock(selectedBlock[0]);
+				}
+				break;
 			case 2: // right button
 				// do we have a selection *and* a face
 				if(selectedBlock && selectedBlock[2]) {
@@ -1303,8 +1311,8 @@ function main() {
 			selectorBuffers[0].location = [0, 0, 0];
 			selectorBuffers[1].location = [0, 0, 0];
 		}
-		if(selectedBlock)
-			document.getElementById("selBlock").innerText = selectedBlock[0];
+		// update the HUD
+		document.getElementById("selBlock").innerText = selectedBlock ? selectedBlock[0] : "";
 		document.getElementById("poolSize").innerText = world.poolSize();
 
 		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
