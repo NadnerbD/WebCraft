@@ -1202,13 +1202,45 @@ function main() {
 		if(document.pointerLockElement === canvas ||
 		document.mozPointerLockElement === canvas) {
 			document.addEventListener('mousemove', lookFunc, false);
+			document.addEventListener('click', clickFunc, false);
 		}else{
 			document.removeEventListener('mousemove', lookFunc, false);
+			document.removeEventListener('click', clickFunc, false);
 		}
 	}
 	// mozilla hasn't made this standard yet
 	document.addEventListener('pointerlockchange', lockChange, false);
 	document.addEventListener('mozpointerlockchange', lockChange, false);
+
+	function clickFunc(event) {
+		switch(event.button) {
+			case 0: // left button
+				if(selectedBlock) {
+					world.setBlock(selectedBlock[0], 0);
+				}
+				break;
+			case 2: // right button
+				// do we have a selection *and* a face
+				if(selectedBlock && selectedBlock[2]) {
+					var faceNormals = [
+						[0, 1, 0],
+						[1, 0, 0],
+						[0, 0, 1],
+						[-1,0, 0],
+						[0, 0,-1],
+						[0,-1, 0]
+					];
+					world.setBlock(
+						vec3.add(
+							selectedBlock[0], 
+							faceNormals[selectedBlock[2]]
+						), 
+						document.getElementById("blockType").value
+					);
+				}
+				break;
+		}
+	}
 
 	var moveDir = [0, 0, 0];
 	document.addEventListener('keydown', function(event) {
@@ -1224,25 +1256,6 @@ function main() {
 			break;
 		case 68: // 68 d
 			moveDir[0] = -1;
-			break;
-		case 69: // e
-			if(selectedBlock) {
-				world.setBlock(selectedBlock[0], 0);
-			}
-			break;
-		case 81: // q
-			// do we have a selection *and* a face
-			if(selectedBlock && selectedBlock[2]) {
-				var faceNormals = [
-					[0, 1, 0],
-					[1, 0, 0],
-					[0, 0, 1],
-					[-1,0, 0],
-					[0, 0,-1],
-					[0,-1, 0]
-				];
-				world.setBlock(vec3.add(selectedBlock[0], faceNormals[selectedBlock[2]]), document.getElementById("blockType").value);
-			}
 			break;
 		case 32: // space
 			moveDir[1] = 1;
