@@ -135,6 +135,9 @@ function World(gl) {
 	var self = this;
 
 	this.smoothLighting = true;
+	this.poolSize = function() {
+		return meshPool.length;
+	}
 
 	this.entities = new Array();
 	this.Entity = function (pos) {
@@ -1232,9 +1235,9 @@ function main() {
 					];
 					world.setBlock(
 						vec3.add(
-							selectedBlock[0], 
+							selectedBlock[0],
 							faceNormals[selectedBlock[2]]
-						), 
+						),
 						document.getElementById("blockType").value
 					);
 				}
@@ -1301,6 +1304,7 @@ function main() {
 		}
 		if(selectedBlock)
 			document.getElementById("selBlock").innerText = selectedBlock[0];
+		document.getElementById("poolSize").innerText = world.poolSize();
 
 		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
 		world.meshGenTime = 0;
