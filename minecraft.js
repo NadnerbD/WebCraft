@@ -39,8 +39,6 @@ void main(void) { \n\
 function initGL(canvas) {
 	try {
 		var gl = canvas.getContext("experimental-webgl", {antialias: false});
-		gl.viewportWidth = canvas.width;
-		gl.viewportHeight = canvas.height;
 	} catch (e) {
 		return null;
 	}
@@ -1042,11 +1040,20 @@ function eulerToMat(euler) {
 }
 
 function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
-	gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+	// if the canvas display size changes, change the canvas image size to match
+	var canvas = gl.canvas;
+	var dw = canvas.clientWidth;
+	var dh = canvas.clientHeight;
+	if(canvas.width != dw || canvas.height != dh) {
+		canvas.width = dw;
+		canvas.height = dh;
+	}
+
+	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var pMatrix = mat4.create();
-	mat4.perspective(70, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+	mat4.perspective(70, gl.drawingBufferWidth / gl.drawingBufferHeight, 0.1, 100.0, pMatrix);
 	gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
 	
 	var mvMatrixStack = [];
@@ -1121,7 +1128,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	}
 }
 
-function skinViewer(filename) {
+function main() {
 	var canvas = document.createElement("canvas");
 	canvas.width = 1024;
 	canvas.height = 768;
@@ -1129,7 +1136,7 @@ function skinViewer(filename) {
 	if(!gl)
 		return null;
 	var shaderProgram = initShaders(gl);
-	var skinTexture = initTexture(gl, filename);
+	//var skinTexture = initTexture(gl, filename);
 	var terrainTexture = initTexture(gl, "terrain.png");
 	var itemTexture = initTexture(gl, "items.png");
 
@@ -1280,7 +1287,7 @@ function skinViewer(filename) {
 			selectorBuffers[1].location = [0, 0, 0];
 		}
 		if(selectedBlock)
-			document.getElementById("selBlock").innerText = selectedBlock.slice(0, 3);
+			document.getElementById("selBlock").innerText = selectedBlock[0];
 
 		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
 		world.meshGenTime = 0;
@@ -1294,7 +1301,7 @@ function skinViewer(filename) {
 		);
 
 		model = model.concat(selectorBuffers);
-		drawScene(gl, shaderProgram, [terrainTexture, skinTexture, itemTexture], model, camPos, camRot, sky);
+		drawScene(gl, shaderProgram, [terrainTexture, /*skinTexture,*/ itemTexture], model, camPos, camRot, sky);
 
 		var timeNow = new Date().getTime();
 		if(lastTime != 0) {
