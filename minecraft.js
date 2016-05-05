@@ -1254,6 +1254,17 @@ function main() {
 		}
 	}
 
+	document.addEventListener('wheel', function(event) {
+		var options = document.getElementById("blockType");
+		if(event.deltaY > 0) {
+			if(options.children[options.selectedIndex + 1])
+				options.value = options.children[options.selectedIndex + 1].value;
+		}else if(event.deltaY < 0) {
+			if(options.children[options.selectedIndex - 1])
+				options.value = options.children[options.selectedIndex - 1].value;
+		}
+	}, false);
+
 	var moveDir = [0, 0, 0];
 	document.addEventListener('keydown', function(event) {
 		switch(event.keyCode) {
