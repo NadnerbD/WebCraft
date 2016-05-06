@@ -127,7 +127,7 @@ function World(gl) {
 	var CHUNK_WIDTH_Y = 128;
 	var CHUNK_WIDTH_Z = 16;
 	var CHUNK_SIZE = [CHUNK_WIDTH_X, CHUNK_WIDTH_Y, CHUNK_WIDTH_Z];
-	var REND_CUBE_SIZE = 8;
+	var REND_CUBE_SIZE = 16;
 	var REND_CUBES_X = CHUNK_WIDTH_X / REND_CUBE_SIZE;
 	var REND_CUBES_Y = CHUNK_WIDTH_Y / REND_CUBE_SIZE;
 	var REND_CUBES_Z = CHUNK_WIDTH_Z / REND_CUBE_SIZE;
@@ -224,16 +224,12 @@ function World(gl) {
 			return true;
 		}
 
-		this.getMesh = function(x, y, z, world) {
-			// Check if neighbors exist
-			// don't generate meshes for this chunk until the neighboring chunks have been created
-			if(!neighborsExist(x, y, z)) return undefined;
-
+		this.getMesh = function(gx, gy, gz, world) {
 			// inputs are in global REND_CUBE coords
 			// convert to local REND_CUBE coords
-			x = x - coord[0] * REND_CUBES_X;
-			y = y - coord[1] * REND_CUBES_Y;
-			z = z - coord[2] * REND_CUBES_Z;
+			x = gx - coord[0] * REND_CUBES_X;
+			y = gy - coord[1] * REND_CUBES_Y;
+			z = gz - coord[2] * REND_CUBES_Z;
 
 			// Check if coords are valid
 			if(x < 0 || y < 0 || z < 0 || x >= REND_CUBES_X || y >= REND_CUBES_Y || z >= REND_CUBES_Z) {
@@ -245,6 +241,10 @@ function World(gl) {
 
 			// determine if chunk needs to be (re)generated
 			if(meshes[i] == undefined || dirtyFlags[i] == true) {
+				// Check if neighbors exist
+				// don't generate meshes for this chunk until the neighboring chunks have been created
+				if(!neighborsExist(gx, gy, gz)) return undefined;
+
 				// this info is only needed if we're regenerating the chunk
 				var gc = [coord[0] * CHUNK_WIDTH_X, coord[1] * CHUNK_WIDTH_Y, coord[2] * CHUNK_WIDTH_Z];
 				var min = [x * REND_CUBE_SIZE + gc[0], y * REND_CUBE_SIZE + gc[1], z * REND_CUBE_SIZE + gc[2]];
@@ -1310,7 +1310,7 @@ function main() {
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
 	// number of chunks from the current chunk to display
-	var DRAW_DIST = 8;
+	var DRAW_DIST = 4;
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
@@ -1344,6 +1344,9 @@ function main() {
 		if(lastTime != 0) {
 			var elapsed = timeNow - lastTime;
 
+			// update the framerate counter
+			document.getElementById("fpsCount").innerText = Math.floor(1000 / elapsed);
+
 			dayRot += elapsed / 5000 * Math.PI;
 			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]);
 		
@@ -1357,7 +1360,7 @@ function main() {
 			vec3.add(vel, [0, moveDir[1] * 31.25 / 100, 0]);
 			world.entities[0].walkForce = vel;
 			
-			// progress the simulation to the curren time
+			// progress the simulation to the current time
 			var currentTime = new Date().getTime();
 			while(gameTime < currentTime) {
 				world.tick();
