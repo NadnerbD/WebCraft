@@ -7,6 +7,9 @@
 		<script type="text/javascript">
 			function init() {
 				document.body.appendChild(main());
+				document.getElementById("blockType").addEventListener("click", function(event) {
+					event.stopPropagation();
+				}, false);
 			}
 		</script>
 		<style>
