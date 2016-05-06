@@ -562,6 +562,16 @@ function World(gl) {
 		return getData(pos[0], pos[1], pos[2], "blocks");
 	}
 	this.setBlock = function(pos, block) {
+		// if we're placing a physical block, make sure it won't get the player stuck
+		var plr = self.entities[0];
+		if(physical(block) && colliding(plr.pos, plr.box, function(x, y, z, channel) {
+			if(pos[0] == x && pos[1] == y && pos[2] == z) {
+				return block;
+			}else{
+				return getData(x, y, z, channel);
+			}
+		}))
+			return;
 		// if there is already an emissive block here, remove it's light
 		var initBlock = getData(pos[0], pos[1], pos[2], "blocks");
 		if(initBlock == 7) // cannot overwrite bedrock
@@ -839,6 +849,19 @@ function World(gl) {
 		else
 			return null;
 	}
+	function colliding(pos, box, dataFunc) {
+		if(dataFunc == undefined) dataFunc = getData;
+		for(var x = Math.floor(pos[0] - box[0] / 2); x < pos[0] + box[0] / 2; x++) {
+			for(var y = Math.floor(pos[1] - box[1] / 2); y < pos[1] + box[1] / 2; y++) {
+				for(var z = Math.floor(pos[2] - box[2] / 2); z < pos[2] + box[2] / 2; z++) {
+					if(getChunk(x, 0, z) == undefined || physical(dataFunc(x, y, z, "blocks"))) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
 	this.moveBox = function(box, pos, vel) {
 		// alternative to sweepBox, using code based on Prelude to the Chambered
 		// probably similar to minecraft's actual collision system
@@ -847,18 +870,6 @@ function World(gl) {
 		// the bisection method of approximating the collision time, which should
 		// have a significantly better worst-case performance
 		var offset = [locOfs(box[0]), locOfs(box[1]), locOfs(box[2])];
-		function colliding(pos, box) {
-			for(var x = Math.floor(pos[0] - box[0] / 2); x < pos[0] + box[0] / 2; x++) {
-				for(var y = Math.floor(pos[1] - box[1] / 2); y < pos[1] + box[1] / 2; y++) {
-					for(var z = Math.floor(pos[2] - box[2] / 2); z < pos[2] + box[2] / 2; z++) {
-						if(getChunk(x, 0, z) == undefined || physical(getData(x, y, z, "blocks"))) {
-							return true;
-						}
-					}
-				}
-			}
-			return false;
-		}
 		// funny hack that works suprisingly well in a 3d grid of cubes
 		// integrate one axis at a time. This fails to allow sliding on
 		// sloped surfaces, which presumably is why minecraft doesn't have any
