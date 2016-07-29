@@ -1220,10 +1220,10 @@ function main() {
 		if(document.pointerLockElement === canvas ||
 		document.mozPointerLockElement === canvas) {
 			document.addEventListener('mousemove', lookFunc, false);
-			document.addEventListener('click', clickFunc, false);
+			document.addEventListener('mouseup', clickFunc, false);
 		}else{
 			document.removeEventListener('mousemove', lookFunc, false);
-			document.removeEventListener('click', clickFunc, false);
+			document.removeEventListener('mouseup', clickFunc, false);
 		}
 	}
 	// mozilla hasn't made this standard yet
