@@ -466,6 +466,7 @@ function World(gl) {
 		[[160]],			// lapis ore
 		[[144]],			// lapis block
 	];
+	blockFaces[49] = [[37, 37, 37, 37, 37, 37]]; // obsidian
 	blockFaces[89] = [[105, 105, 105, 105, 105, 105]]; // lightstone
 	function faceId(block, face, data) {
 		// "data" is the secondary block metadata thing in notch's chunks
