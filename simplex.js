@@ -22,7 +22,10 @@ function SimplexNoise(octaves, maxsize) {
 	}
 
 	var unskew = (6 - Math.sqrt(12)) / 12;
-	var skew = ((1 / (1 - 2 * unskew)) - 1) / 2; 
+	var skew = ((1 / (1 - 2 * unskew)) - 1) / 2;
+
+	// simplices are smaller than cubic grids
+	maxsize /= skew;
 
 	function noise(x, y) {
 		// skew the input out
