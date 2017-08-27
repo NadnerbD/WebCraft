@@ -10,40 +10,41 @@
 				canvas = document.getElementById("output");
 				ctx = canvas.getContext("2d");
 				image = ctx.createImageData(canvas.width, canvas.height);
-				noiseGens = [new Noise(6, 128), new SimplexNoise(6, 128)];
-				draw(0);
+				noiseGens = [new Noise(5, 64), new SimplexNoise(5, 64)];
+				draw(1, 0);
 			}
 
-			function draw(geni) {
+			function draw(geni, z) {
 				// choose noise generator
 				var gen = noiseGens[geni];
 				// reset pixel index
 				pi = 0;
 				// draw per-scanline to avoid javascript timeout on iPod/Phone
 				if(navigator.userAgent.indexOf("iPhone") != -1) {
-					line(gen, 0, true);
+					line(gen, 0, 0, true);
 				}else{
 					var time = new Date().getTime();
 					for(var y = 0; y < canvas.height; y++) {
-						line(gen, y, false);
+						line(gen, y, z, false);
 					}
 					ctx.putImageData(image, 0, 0);
 					document.getElementById('time').innerText = new Date().getTime() - time;
+					setTimeout(function() { draw(geni, z + 10); }, 1);
 				}
 			}
 
-			function line(gen, y, draw) {
+			function line(gen, y, z, draw) {
 				for(var x = 0; x < canvas.width; x++) {
-					var value = gen.sample(x, y, 0) * 255;
+					var value = gen.sample(x, y, z) * 255;
 					image.data[pi++] = value;
-					image.data[pi++] = value;
-					image.data[pi++] = value;
+					image.data[pi++] = value > 255 ? 0 : value;
+					image.data[pi++] = value < 0 ? 255 : value;
 					image.data[pi++] = 255;
 				}
 				if(draw) {
 					ctx.putImageData(image, 0, 0);
 					if(y + 1 < canvas.height) {
-						setTimeout(function () {line(y + 1, true);}, 0);
+						setTimeout(function () {line(gen, y + 1, z, true);}, 0);
 					}
 				}
 			}
@@ -52,8 +53,8 @@
 	<body onload="init()">
 		<canvas id="output" width="800" height="600"></canvas>
 		<p>
-			<button onclick="draw(0)">Standard</button>
-			<button onclick="draw(1)">Simplex</button>
+			<button onclick="draw(0, 0)">Standard</button>
+			<button onclick="draw(1, 0)">Simplex</button>
 			<span id="time"></span>
 		</p>
 	</body>
