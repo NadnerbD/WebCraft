@@ -53,12 +53,13 @@ function Noise(levels, maxsize) {
 	this.sample = function (x, y, z) {
 		var out = 0;
 		for(var level = 0; level < levels; level++) {
-			var lx = x / maxsize * Math.pow(2, level);
-			var ly = y / maxsize * Math.pow(2, level);
-			var lz = z / maxsize * Math.pow(2, level);
-			out += getValue3D(valueCache[level], lx, ly, lz) / Math.pow(2, level);
+			var d = Math.pow(2, level);
+			var lx = x / maxsize * d;
+			var ly = y / maxsize * d;
+			var lz = z / maxsize * d;
+			out += getValue3D(valueCache[level], lx, ly, lz) / d;
 		}
 		// output should be scaled to between 0 and 1
-		return out / (2 - 1 / levels);
+		return out / (2 - 1 / Math.pow(2, levels - 1));
 	}
 }
