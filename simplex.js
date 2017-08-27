@@ -117,7 +117,7 @@ function SimplexNoise(octaves, maxsize) {
 		}
 
 		// value is in the range [-1, 1]
-		var value = 32.0 * (n0 + n1 + n2 + n3);
+		var value = 85.0 * (n0 + n1 + n2 + n3);
 
 		// we return [0, 1]
 		return value / 2 + 0.5;
