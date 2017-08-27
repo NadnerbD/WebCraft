@@ -1,0 +1,46 @@
+<html>
+	<head>
+		<title>Simplex Noise</title>
+		<script src="noise.js"></script>
+		<script type="text/javascript">
+			var canvas, ctx, image, noiseGen;
+			var i = 0;
+			
+			function init() {
+				canvas = document.getElementById("output");
+				ctx = canvas.getContext("2d");
+				image = ctx.createImageData(canvas.width, canvas.height);
+				noiseGen = new Noise(6, 128);
+
+				// draw per-scanline to avoid javascript timeout on iPod/Phone
+				if(navigator.userAgent.indexOf("iPhone") != -1) {
+					line(0, true);
+				}else{
+					for(var y = 0; y < canvas.height; y++) {
+						line(y, false);
+					}
+					ctx.putImageData(image, 0, 0);
+				}
+			}
+
+			function line(y, draw) {
+				for(var x = 0; x < canvas.width; x++) {
+					var value = noiseGen.sample(x, y, 0) * 255;
+					image.data[i++] = value;
+					image.data[i++] = value;
+					image.data[i++] = value;
+					image.data[i++] = 255;
+				}
+				if(draw) {
+					ctx.putImageData(image, 0, 0);
+					if(y + 1 < canvas.height) {
+						setTimeout(function () {line(y + 1, true);}, 0);
+					}
+				}
+			}
+		</script>
+	</head>
+	<body onload="init()">
+		<canvas id="output" width="800" height="600"></canvas>
+	</body>
+</html>
