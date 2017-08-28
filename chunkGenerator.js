@@ -1,7 +1,7 @@
-importScripts("noise.js", "glMatrix-0.9.5.min.js");
+importScripts("simplex.js", "glMatrix-0.9.5.min.js");
 
 // 6 octaves, max feature size of 128
-var terrainNoise = new Noise(6, 128);
+var terrainNoise = new SimplexNoise(6, 128);
 var CHUNK_WIDTH_X = 16;
 var CHUNK_WIDTH_Y = 128;
 var CHUNK_WIDTH_Z = 16;
