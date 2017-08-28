@@ -13,6 +13,8 @@ function SimplexNoise(octaves, maxsize) {
 	49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
 	138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
 
+	perm = perm.concat(perm);
+
 	var grads = [
 		[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
 		[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
@@ -78,10 +80,10 @@ function SimplexNoise(octaves, maxsize) {
 		var ii = i & 255;
 		var jj = j & 255;
 		var kk = k & 255;
-		var gi0 = perm[(ii +      perm[(jj +      perm[kk     ]) & 255]) & 255] % grads.length;
-		var gi1 = perm[(ii + i1 + perm[(jj + j1 + perm[kk + k1]) & 255]) & 255] % grads.length;
-		var gi2 = perm[(ii + i2 + perm[(jj + j2 + perm[kk + k2]) & 255]) & 255] % grads.length;
-		var gi3 = perm[(ii + 1  + perm[(jj + 1  + perm[kk + 1 ]) & 255]) & 255] % grads.length;
+		var gi0 = perm[ii +      perm[jj +      perm[kk     ]]] % grads.length;
+		var gi1 = perm[ii + i1 + perm[jj + j1 + perm[kk + k1]]] % grads.length;
+		var gi2 = perm[ii + i2 + perm[jj + j2 + perm[kk + k2]]] % grads.length;
+		var gi3 = perm[ii + 1  + perm[jj + 1  + perm[kk + 1 ]]] % grads.length;
 
 		// 1/2 - distance squared
 		var t0 = 0.5 - ofsAx*ofsAx - ofsAy*ofsAy - ofsAz*ofsAz;

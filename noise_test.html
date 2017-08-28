@@ -10,7 +10,7 @@
 				canvas = document.getElementById("output");
 				ctx = canvas.getContext("2d");
 				image = ctx.createImageData(canvas.width, canvas.height);
-				noiseGens = [new Noise(5, 64), new SimplexNoise(5, 64)];
+				noiseGens = [new Noise(5, 64), new SimplexNoise(1, 64)];
 				draw(1, 0);
 			}
 
@@ -29,7 +29,7 @@
 					}
 					ctx.putImageData(image, 0, 0);
 					document.getElementById('time').innerText = new Date().getTime() - time;
-					setTimeout(function() { draw(geni, z + 10); }, 1);
+					setTimeout(function() { draw(geni, z - 10); }, 1);
 				}
 			}
 
