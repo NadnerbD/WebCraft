@@ -12,8 +12,10 @@ uniform vec3 uSkyLightDiffuseColor; \n\
 uniform vec3 uSkyLightAmbientColor; \n\
 varying vec2 vTextureCoord; \n\
 varying vec3 vVertexColor; \n\
+varying vec4 vPosition; \n\
 void main(void) { \n\
-	gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0); \n\
+	vPosition = uMVMatrix * vec4(aVertexPosition, 1.0); \n\
+	gl_Position = uPMatrix * vPosition; \n\
 	vTextureCoord = aTextureCoord; \n\
 	vec3 skyLightColor = (uSkyLightAmbientColor + max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor) * aSkyLight; \n\
 	vec3 blockLightColor =  vec3(1, 1, 1) * aBlockLight; \n\
@@ -27,12 +29,17 @@ precision highp float; \n\
 #endif \n\
 varying vec2 vTextureCoord; \n\
 varying vec3 vVertexColor; \n\
+varying vec4 vPosition; \n\
 uniform sampler2D uSampler; \n\
 uniform bool uEnableAlpha; \n\
 void main(void) { \n\
 	gl_FragColor = texture2D(uSampler, vTextureCoord) * vec4(vVertexColor, 1.0); \n\
 	if(gl_FragColor.a < 0.9 || (uEnableAlpha && gl_FragColor == texture2D(uSampler, vec2(0.0, 0.0)))) \n\
 		discard; \n\
+	float dist = length(vec3(vPosition)); \n\
+	float dens = clamp(1.0 / exp(dist * 0.005), 0.0, 1.0); \n\
+	// The fog color is hardcoded here, but matches the clearColor we're using at time of writing \n\
+	gl_FragColor = vec4(mix(vec3(0.0, 0.5, 1.0), vec3(gl_FragColor), dens), gl_FragColor.a); \n\
 } \n\
 ";
 
@@ -1072,7 +1079,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var pMatrix = mat4.create();
-	mat4.perspective(70, gl.drawingBufferWidth / gl.drawingBufferHeight, 0.1, 100.0, pMatrix);
+	mat4.perspective(70, gl.drawingBufferWidth / gl.drawingBufferHeight, 0.1, 128.0, pMatrix);
 	gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
 	
 	var mvMatrixStack = [];
