@@ -111,18 +111,18 @@ function initShaders(gl) {
 }
 
 function initTexture(gl, filename) {
-	var skinTexture = gl.createTexture();
-	skinTexture.image = new Image();
-	skinTexture.image.onload = function () {
-		gl.bindTexture(gl.TEXTURE_2D, skinTexture);
+	var texture = gl.createTexture();
+	texture.image = new Image();
+	texture.image.onload = function () {
+		gl.bindTexture(gl.TEXTURE_2D, texture);
 		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, skinTexture.image);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 		gl.bindTexture(gl.TEXTURE_2D, null);
 	}
-	skinTexture.image.src = filename;
-	return skinTexture;
+	texture.image.src = filename;
+	return texture;
 }
 
 
@@ -1081,6 +1081,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	}
 
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+	gl.clearColor(0.0, 0.5, 1.0, 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var pMatrix = mat4.create();
@@ -1116,12 +1117,19 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 			gl.lineWidth(2);
 		}else if(model[i].name == "item") {
 			gl.uniform1i(shaderProgram.samplerUniform, 1);
-		}else{
+		}else if(model[i].name == "crosshair") {
 			gl.disable(gl.CULL_FACE);
 			gl.uniform1i(shaderProgram.samplerUniform, 2);
 		}
 
 		mvPushMatrix(mvMatrixStack, mvMatrix);
+
+		if(model[i].name == "crosshair") {
+			mat4.identity(mvMatrix);
+			gl.disable(gl.DEPTH_TEST);
+		}else{
+			gl.enable(gl.DEPTH_TEST);
+		}
 
 		mat4.translate(mvMatrix, model[i].location);
 		mat4.rotate(mvMatrix, model[i].rotation[0], [model[i].rotation[1], model[i].rotation[2], model[i].rotation[3]]); 
@@ -1170,6 +1178,7 @@ function main() {
 	//var skinTexture = initTexture(gl, filename);
 	var terrainTexture = initTexture(gl, "terrain.png");
 	var itemTexture = initTexture(gl, "items.png");
+	var crossTexture = initTexture(gl, "crosshair.png");
 
 	var selector = {
 		vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0,  1, 1, 0,  0, 0, 1,  1, 0, 1,  0, 1, 1,  1, 1, 1],
@@ -1188,6 +1197,20 @@ function main() {
 	selector.scale = [0.01, 0.01, 0.01];
 	selectorBuffers.push(initObjectBuffers(gl, selector, "selector"));
 
+	var crosshair = {
+		vertices: [-1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0],
+		matColors: [1, 1, 1,  1, 1, 1,  1, 1, 1,  1, 1, 1],
+		normals: [0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1],
+		uvs: [0, 0,  1, 0,  1, 1,  0, 1],
+		faces: [0, 1, 2,  0, 2, 3],
+		skyLight: [0, 0, 0, 0],
+		blockLight: [1, 1, 1, 1],
+		location: [0, 0, -1],
+		rotation: [0, 0, 1, 0],
+		scale: [0.025, 0.025, 0.025]
+	};
+	var crosshairBuffer = initObjectBuffers(gl, crosshair, "crosshair");
+
 	var world = new World(gl);
 
 	/*model.push(initObjectBuffers(gl, Mesh.Head, "head"));
@@ -1198,9 +1221,6 @@ function main() {
 	model.push(initObjectBuffers(gl, Mesh.LegLeft, "legl"));
 	model.push(initObjectBuffers(gl, Mesh.LegRight, "legr"));
 	model.push(initObjectBuffers(gl, Mesh.Item, "item"));*/
-
-	gl.clearColor(0.0, 0.5, 1.0, 1.0);
-	gl.enable(gl.DEPTH_TEST);
 
 	var sky = [
 		vec3.create([0.707, -0.707, 0]), // direction
@@ -1364,7 +1384,7 @@ function main() {
 			world.entities[0].pos[1],
 			world.entities[0].pos[2],
 			DRAW_DIST
-		);
+		).concat([crosshairBuffer]);
 
 		// change the position of the selector
 		if(selectedBlock) {
@@ -1373,7 +1393,7 @@ function main() {
 			model = model.concat(selectorBuffers);
 		}
 
-		drawScene(gl, shaderProgram, [terrainTexture, /*skinTexture,*/ itemTexture], model, camPos, camRot, sky);
+		drawScene(gl, shaderProgram, [terrainTexture, itemTexture, crossTexture], model, camPos, camRot, sky);
 
 		var timeNow = new Date().getTime();
 		if(lastTime != 0) {
