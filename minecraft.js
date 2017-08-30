@@ -1113,7 +1113,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 			gl.uniform1i(shaderProgram.samplerUniform, 0);
 		}else if(model[i].name == "selector") {
 			gl.disable(gl.CULL_FACE);
-			gl.uniform1i(shaderProgram.samplerUniform, 0);
+			gl.uniform1i(shaderProgram.samplerUniform, 2);
 			gl.lineWidth(2);
 		}else if(model[i].name == "item") {
 			gl.uniform1i(shaderProgram.samplerUniform, 1);
@@ -1184,7 +1184,7 @@ function main() {
 		vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0,  1, 1, 0,  0, 0, 1,  1, 0, 1,  0, 1, 1,  1, 1, 1],
 		matColors: [0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0],
 		normals: [0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0],
-		uvs: [0, 0,  0, 0,  0, 0,  0, 0, 0, 0,  0, 0,  0, 0,  0, 0],
+		uvs: [0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5],
 		faces: [0, 1,  0, 2,  0, 4,  1, 3,  1, 5,  2, 3,  2, 6,  3, 7,  4, 5,  4, 6,  5, 7,  6, 7],
 		skyLight: [0, 0, 0, 0, 0, 0, 0, 0],
 		blockLight: [0, 0, 0, 0, 0, 0, 0, 0],
@@ -1384,7 +1384,7 @@ function main() {
 			world.entities[0].pos[1],
 			world.entities[0].pos[2],
 			DRAW_DIST
-		).concat([crosshairBuffer]);
+		);
 
 		// change the position of the selector
 		if(selectedBlock) {
@@ -1392,6 +1392,8 @@ function main() {
 			selectorBuffers[1].location = vec3.subtract(vec3.add(vec3.create(selectedBlock[0]), selectedBlock[1]), [0.005, 0.005, 0.005]);
 			model = model.concat(selectorBuffers);
 		}
+
+		model = model.concat([crosshairBuffer]);
 
 		drawScene(gl, shaderProgram, [terrainTexture, itemTexture, crossTexture], model, camPos, camRot, sky);
 
