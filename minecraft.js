@@ -153,8 +153,11 @@ function World(gl) {
 		this.vel = [0, 0, 0];
 		this.walkForce = [0, 0, 0];
 	}
-	var frictCoeff = 0.025;
+
+	var frictCoeff = 0.7;
 	var flyCoeff = 0.025;
+	this.walkStrength = 31.25 / 700;
+	this.jumpStrength = 31.25 / 110;
 	this.tick = function () {
 		// this function should be executed 32 times per second by the main loop
 		for(var i = 0; i < self.entities.length; i++) {
@@ -1388,8 +1391,8 @@ function main() {
 				vec3.scale([-dirs[2], -dirs[6], -dirs[10]], moveDir[2]), 
 				vec3.scale([-dirs[0], -dirs[4], -dirs[8]], moveDir[0])
 			);
-			vec3.scale(vec3.normalize(vel), 31.25 / 200);
-			vec3.add(vel, [0, moveDir[1] * 31.25 / 100, 0]);
+			vec3.scale(vec3.normalize(vel), world.walkStrength);
+			vec3.add(vel, [0, moveDir[1] * world.jumpStrength, 0]);
 			world.entities[0].walkForce = vel;
 			
 			// progress the simulation to the current time
