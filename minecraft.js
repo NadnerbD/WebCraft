@@ -1351,14 +1351,6 @@ function main() {
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
-		// change the position of the selector
-		if(selectedBlock) {
-			selectorBuffers[0].location = vec3.subtract(vec3.create(selectedBlock[0]), [0.005, 0.005, 0.005]);
-			selectorBuffers[1].location = vec3.subtract(vec3.add(vec3.create(selectedBlock[0]), selectedBlock[1]), [0.005, 0.005, 0.005]);
-		}else{
-			selectorBuffers[0].location = [0, 0, 0];
-			selectorBuffers[1].location = [0, 0, 0];
-		}
 		// update the HUD
 		document.getElementById("selBlock").innerText = selectedBlock ? selectedBlock[0] : "";
 		document.getElementById("poolSize").innerText = world.poolSize();
@@ -1374,7 +1366,13 @@ function main() {
 			DRAW_DIST
 		);
 
-		model = model.concat(selectorBuffers);
+		// change the position of the selector
+		if(selectedBlock) {
+			selectorBuffers[0].location = vec3.subtract(vec3.create(selectedBlock[0]), [0.005, 0.005, 0.005]);
+			selectorBuffers[1].location = vec3.subtract(vec3.add(vec3.create(selectedBlock[0]), selectedBlock[1]), [0.005, 0.005, 0.005]);
+			model = model.concat(selectorBuffers);
+		}
+
 		drawScene(gl, shaderProgram, [terrainTexture, /*skinTexture,*/ itemTexture], model, camPos, camRot, sky);
 
 		var timeNow = new Date().getTime();
