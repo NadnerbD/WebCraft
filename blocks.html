@@ -10,6 +10,9 @@
 				document.getElementById("blockType").addEventListener("click", function(event) {
 					event.stopPropagation();
 				}, false);
+				document.getElementById("drawDist").addEventListener("click", function(event) {
+					event.stopPropagation();
+				}, false);
 			}
 		</script>
 		<style>
@@ -53,6 +56,8 @@
 		<option value="22">Lazuli block</option>
 		<option value="49">Obsidian</option>
 		<option value="89">Lightstone</option>
+	</select>
+	<select id="drawDist">
 	</select>
 	<br/>
 	Selected Block: <span id="selBlock"></span>

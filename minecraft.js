@@ -1079,7 +1079,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var pMatrix = mat4.create();
-	mat4.perspective(70, gl.drawingBufferWidth / gl.drawingBufferHeight, 0.1, 128.0, pMatrix);
+	mat4.perspective(70, gl.drawingBufferWidth / gl.drawingBufferHeight, 0.1, 256.0, pMatrix);
 	gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
 	
 	var mvMatrixStack = [];
@@ -1207,6 +1207,20 @@ function main() {
 	world.entities[0] = new world.Entity([8, 130, 8]);
 	var camRot = [45, 45, 0];
 
+	// number of chunks from the current chunk to display
+	var DRAW_DIST = 7;
+	var distSelector = document.getElementById('drawDist');
+	for(var i = 1; i <= 16; i++) {
+		var elem = document.createElement("option");
+		elem.value = i;
+		elem.innerText = i;
+		distSelector.appendChild(elem);
+	}
+	distSelector.value = DRAW_DIST;
+	distSelector.onchange = function() {
+		DRAW_DIST = parseInt(distSelector.value);
+	}
+
 	function lookFunc(event) {
 		var delta = [event.movementX || event.mozMovementX || 0, event.movementY || event.mozMovementY || 0];
 		camRot[1] += delta[0] * 0.25;
@@ -1328,8 +1342,7 @@ function main() {
 	var dayRot = 0;
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
-	// number of chunks from the current chunk to display
-	var DRAW_DIST = 4;
+
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
