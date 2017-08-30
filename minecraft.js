@@ -45,7 +45,7 @@ void main(void) { \n\
 
 function initGL(canvas) {
 	try {
-		var gl = canvas.getContext("experimental-webgl", {antialias: false});
+		var gl = canvas.getContext("webgl", {antialias: false});
 	} catch (e) {
 		return null;
 	}
@@ -483,9 +483,9 @@ function World(gl) {
 		var blockData = blockFaces[block][data % blockFaces[block].length];
 		return blockData[face % blockData.length];
 	}
-	function faceColor(block, face) {
+	function faceColor(block, face, biome) {
 		if((block == 2 && face == 0) || block == 0 || block == 18)
-			return [0.5, 1, 0];
+			return [biome, 1, 0];
 		else
 			return [1, 1, 1];
 	}
@@ -678,7 +678,7 @@ function World(gl) {
 		}
 		return value;
 	}
-	function addFace(x, y, z, block, output, bounds, face, id, norm, vertSource) {
+	function addFace(x, y, z, block, output, bounds, face, id, norm, vertSource, biome) {
 		// inserts all face elements except for vertex lighting
 		for(var index in faceVertIndices)
 			output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
@@ -693,7 +693,7 @@ function World(gl) {
 			// add the normals
 			output.normals.push(norm[0], norm[1], norm[2]);
 			// add the biome color layer
-			var color = faceColor(block, face);
+			var color = faceColor(block, face, biome);
 			output.matColors.push(color[0], color[1], color[2]);
 			// add uvs, shifted based on block type and face number
 			var uv = faceUVs[vertIndex];
@@ -701,7 +701,7 @@ function World(gl) {
 			output.uvs.push(uv[0] / 16 + ofs[0], 1 - (uv[1] / 16 + ofs[1]));
 		}
 	}
-	function addFluidBlock(x, y, z, block, output, bounds) {
+	function addFluidBlock(x, y, z, block, output, bounds, biome) {
 		// this adds blocks with shifted top verts (based on metadata heightmap)
 		// notch's heightmap is weird, 0 is max, increases with distance to a max that varies
 		for(var face in faceNormals) {
@@ -711,7 +711,7 @@ function World(gl) {
 			// since fluid blocks are non-solid, we also check if we border our own liquid type
 			if(solid(adjBlock) || adjBlock == block)
 				continue;
-			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts);
+			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts, biome);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 				// adjust vertical displacement of top vertices
 				var vert = output.vertices[output.vertices.length - 4 + vertIndex];
@@ -734,12 +734,12 @@ function World(gl) {
 			}
 		}
 	}
-	function addCross(x, y, z, block, output, bounds) {
+	function addCross(x, y, z, block, output, bounds, biome) {
 		for(var face = 0; face < 4; face++) {
 			var data = getData(x, y, z, "data");
 			var id = faceId(block, face, data);
 			var norm = crossNormals[face];
-			addFace(x, y, z, block, output, bounds, face, id, norm, crossVerts);
+			addFace(x, y, z, block, output, bounds, face, id, norm, crossVerts, biome);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 				// flat lighting for cross elements
 				output.skyLight.push(Math.pow(0.8, MAX_LIGHT - getData(x, y, z, "skyLight")));
@@ -747,7 +747,7 @@ function World(gl) {
 			}
 		}
 	}
-	function addBlock(x, y, z, block, output, bounds) {
+	function addBlock(x, y, z, block, output, bounds, biome) {
 		var data = getData(x, y, z, "data");
 		for(var face in faceNormals) {
 			var id = faceId(block, face, data);
@@ -755,7 +755,7 @@ function World(gl) {
 			var adjBlock = getData(x + norm[0], y + norm[1], z + norm[2], "blocks");
 			if(solid(adjBlock) || (adjBlock == block && !drawSelfAdj(block)) || id == -1)
 				continue;
-			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts);
+			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts, biome);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 				// get the vertex lighting attributes
 				if(emit(block)) {
@@ -773,6 +773,7 @@ function World(gl) {
 		}
 	}
 
+	var biomeNoise = new SimplexNoise(1, 16);
 	var MESH_TIME_PER_FRAME = 20;
 	this.meshGenTime = 0;
 	this.meshesGenerated = 0;
@@ -791,16 +792,17 @@ function World(gl) {
 		output.blockLight = new Array();
 		output.matColors = new Array();
 		for(var z = bounds.min[2]; z < bounds.max[2]; z++) {
-			for(var y = bounds.min[1]; y < bounds.max[1]; y++) {
-				for(var x = bounds.min[0]; x < bounds.max[0]; x++) {
+			for(var x = bounds.min[0]; x < bounds.max[0]; x++) {
+				var biome = biomeNoise.sample(x, 0, z);
+				for(var y = bounds.min[1]; y < bounds.max[1]; y++) {
 					var block = getData(x, y, z, "blocks");
 					if(isCross(block)) {
 						addCross(x, y, z, block, output, bounds);
 					}else if(block > 0) {
 						// second block layer for biome grass edges
 						if(block == 2)
-							addBlock(x, y, z, 0, output, bounds);
-						addBlock(x, y, z, block, output, bounds);
+							addBlock(x, y, z, 0, output, bounds, biome);
+						addBlock(x, y, z, block, output, bounds, biome);
 					}
 				}
 			}
