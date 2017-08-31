@@ -127,7 +127,8 @@ function initTexture(gl, filename) {
 
 
 function World(gl) {
-	var chunks = new Object();
+	// we can store chunks in arrays if we partition at the origin
+	var chunks = [[], [], [], [], [], [], [], []];
 	var meshPool = new Array();
 	var meshPoolUse = new Array();
 	var CHUNK_WIDTH_X = 16;
@@ -178,7 +179,10 @@ function World(gl) {
 	// add chunks to chunk list when we recieve them from the generator
 	chunkGenerator.onmessage = function(msg) {
 		noCreate = true;
-		chunks[msg.data[0]] = new Chunk(msg.data[0], msg.data[1]);
+		var cx = msg.data[0][0];
+		var cy = msg.data[0][1];
+		var cz = msg.data[0][2];
+		chunks[(cx > 0) | (cz > 0) << 1 | (cy > 0) << 2][Math.abs(cx) + Math.abs(cz) * RS + Math.abs(cy) * RS * RS] = new Chunk(msg.data[0], msg.data[1]);
 		// these updates take a massively long time for some reason
 		//initLight(msg.data[0]);
 		noCreate = false;
@@ -385,6 +389,8 @@ function World(gl) {
 	function physical(block) {
 		return block > 0 && block != 6;
 	}
+	var lastChunk;
+	var RS = 128;
 	function getChunk(x, y, z) {
 		var cx = Math.floor(x / CHUNK_WIDTH_X);
 		var cy = Math.floor(y / CHUNK_WIDTH_Y);
@@ -392,15 +398,17 @@ function World(gl) {
 		if(cy != 0)
 			return undefined;
 		var coord = [cx, cy, cz];
-		var chunk = chunks[coord];
+		if(lastChunk && lastChunk.coord == coord) return lastChunk;
+		var chunk = chunks[(cx > 0) | (cz > 0) << 1 | (cy > 0) << 2][Math.abs(cx) + Math.abs(cz) * RS + Math.abs(cy) * RS * RS];
 		if(chunk == undefined) {
 			if(noCreate)
 				return undefined;
 			chunkGenerator.postMessage(coord);
-			chunks[coord] = {coord: "queued"};
+			chunks[(cx > 0) | (cz > 0) << 1 | (cy > 0) << 2][Math.abs(cx) + Math.abs(cz) * RS + Math.abs(cy) * RS * RS] = {coord: "queued"};
 		}else if(chunk.coord == "queued") {
 			return undefined;
 		}
+		lastChunk = chunk;
 		return chunk;
 	}
 	function initLight(coord) {
