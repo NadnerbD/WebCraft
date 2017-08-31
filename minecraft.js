@@ -355,6 +355,7 @@ function World(gl) {
 	// block attributes
 	function opacity(block) {
 		// this attribute is used by the light propagation functions
+		if(block == 18) return 3;
 		return (block > 0 
 			&& block != 6	// trees
 			&& block != 20	// glass
@@ -503,11 +504,12 @@ function World(gl) {
 	function addLights(lights, channel) {
 		// lights is an array of [pos, value] pairs
 		var cellStack = new Array();
-		for(var light in lights) {
-			var pos = lights[light][0];
-			var value = lights[light][1];
+		for(var light of lights) {
+			var pos = light[0];
+			var value = light[1];
+			// can't "add" light to somewhere that's already brighter
 			if(value >= getData(pos[0], pos[1], pos[2], channel)) {
-				cellStack.push([pos, value]); // can't "add" light to somewhere that's already brighter
+				cellStack.push([pos, value]);
 				setData(pos[0], pos[1], pos[2], channel, value);
 			}
 		}
@@ -534,35 +536,41 @@ function World(gl) {
 			}
 		}
 	}
-	function removeLight(pos, channel, notFirst) {
-		var locLight = getData(pos[0], pos[1], pos[2], channel);
-		setData(pos[0], pos[1], pos[2], channel, -1);
-		for(var i in faceNormals) {
-			var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
-			var adjLight = getData(adjPos[0], adjPos[1], adjPos[2], channel);
-			if(adjLight > 0 && adjLight < locLight)
-				removeLight(adjPos, channel, 1);
-			else if(adjLight == MAX_LIGHT && i == 5 && channel == "skyLight") // remove downward skyLight
-				removeLight(adjPos, channel, 1);
+	function removeLight(pos, channel) {
+		var cellStack = [pos];
+		while(cellStack.length > 0) {
+			var cur = cellStack.shift();
+			var locLight = getData(cur[0], cur[1], cur[2], channel);
+			setData(cur[0], cur[1], cur[2], channel, -1);
+			for(var i in faceNormals) {
+				var adjPos = vec3.add(vec3.create(cur), faceNormals[i]);
+				var adjLight = getData(adjPos[0], adjPos[1], adjPos[2], channel);
+				if(adjLight > 0 && adjLight < locLight)
+					cellStack.push(adjPos);
+				else if(adjLight == MAX_LIGHT && i == 5 && channel == "skyLight") // remove downward skyLight
+					cellStack.push(adjPos);
+			}
 		}
-		if(!notFirst) {
-			var lights = findLight(pos, channel);
-			addLights(lights, channel);
-		}
+		var lights = findLight(pos, channel);
+		addLights(lights, channel);
 	}
-	function findLight(pos, channel, result) {
-		if(!result)
-			result = new Array();
-		// so far I haven't found a downside to just leaving black light at -1
+	function findLight(pos, channel) {
+		var result = new Array();
+		var cellStack = [pos];
 		setData(pos[0], pos[1], pos[2], channel, 0);
-		for(var i in faceNormals) {
-			var adjPos = vec3.add(vec3.create(pos), faceNormals[i]);
-			var adjLight = getData(adjPos[0], adjPos[1], adjPos[2], channel);
-			var adjBlock = getData(adjPos[0], adjPos[1], adjPos[2], "blocks");
-			if(adjLight == -1) {
-				findLight(adjPos, channel, result);	
-			}else if(adjLight > 0) {
-				result.push([adjPos, adjLight]);
+		while(cellStack.length > 0) {
+			var cur = cellStack.shift();
+			// so far I haven't found a downside to just leaving black light at -1
+			for(var i in faceNormals) {
+				var adjPos = vec3.add(vec3.create(cur), faceNormals[i]);
+				var adjLight = getData(adjPos[0], adjPos[1], adjPos[2], channel);
+				var adjBlock = getData(adjPos[0], adjPos[1], adjPos[2], "blocks");
+				if(adjLight == -1) {
+					setData(adjPos[0], adjPos[1], adjPos[2], channel, 0);
+					cellStack.push(adjPos);
+				}else if(adjLight > 0) {
+					result.push([adjPos, adjLight]);
+				}
 			}
 		}
 		return result;
