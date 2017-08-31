@@ -1372,6 +1372,8 @@ function main() {
 	}, false);
 
 	var lastTime = 0;
+	var timeSamples = new Array(30);
+	var timeIndex = 0;
 	var dayRot = 0;
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
@@ -1408,9 +1410,18 @@ function main() {
 		var timeNow = new Date().getTime();
 		if(lastTime != 0) {
 			var elapsed = timeNow - lastTime;
+			timeSamples[timeIndex] = elapsed;
+			timeIndex = (timeIndex + 1) % timeSamples.length;
+			var sum = 0;
+			var max = 0;
+			for(var sample of timeSamples) {
+				sum += sample;
+				if(sample > max) max = sample;
+			}
+			var average = sum / timeSamples.length;
 
 			// update the framerate counter
-			document.getElementById("fpsCount").innerText = Math.floor(1000 / elapsed);
+			document.getElementById("fpsCount").innerText = Math.floor(1000 / average) + " min: " + Math.floor(1000 / max);
 
 			dayRot += elapsed / 5000 * Math.PI;
 			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]);
