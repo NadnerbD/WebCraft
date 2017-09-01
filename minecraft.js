@@ -127,8 +127,12 @@ function initTexture(gl, filename) {
 
 
 function World(gl) {
-	// we can store chunks in arrays if we partition at the origin
-	var chunks = [[], [], [], [], [], [], [], []];
+	var chunkPool = new Array();
+	var chunkPoolUse = new Array();
+	// must be a power of 2
+	var CHUNK_WINDOW_SIZE = 64;
+	var chunkWindow = new Array();
+
 	var meshPool = new Array();
 	var meshPoolUse = new Array();
 	var CHUNK_WIDTH_X = 16;
@@ -175,17 +179,17 @@ function World(gl) {
 	}
 
 	var chunkGenerator = new Worker('chunkGenerator.js');
-	var noCreate = false;
 	// add chunks to chunk list when we recieve them from the generator
 	chunkGenerator.onmessage = function(msg) {
-		noCreate = true;
 		var cx = msg.data[0][0];
 		var cy = msg.data[0][1];
 		var cz = msg.data[0][2];
-		chunks[(cx > 0) | (cz > 0) << 1 | (cy > 0) << 2][Math.abs(cx) + Math.abs(cz) * RS + Math.abs(cy) * RS * RS] = new Chunk(msg.data[0], msg.data[1]);
+		var wi = (cx & CHUNK_WINDOW_SIZE - 1) +
+			(cz & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE +
+			(cy & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE * CHUNK_WINDOW_SIZE;
+		chunkWindow[wi] = new Chunk(msg.data[0], msg.data[1]);
 		// these updates take a massively long time for some reason
 		//initLight(msg.data[0]);
-		noCreate = false;
 	};
 
 	function Chunk(coord, data) {
@@ -196,6 +200,7 @@ function World(gl) {
 		var meshes = new Array(meshCount);
 		var dirtyFlags = new Array(meshCount);
 
+		this.coord = coord;
 		this.data = data.data;
 		this.blocks = data.blocks;
 		this.skyLight = data.skyLight;
@@ -207,8 +212,8 @@ function World(gl) {
 
 		this.touch = function(x, y, z) {
 			// takes chunk local coord and marks meshes as dirty
-			var i = Math.floor(x / REND_CUBE_SIZE) + 
-				Math.floor(y / REND_CUBE_SIZE) * REND_CUBES_X + 
+			var i = Math.floor(x / REND_CUBE_SIZE) +
+				Math.floor(y / REND_CUBE_SIZE) * REND_CUBES_X +
 				Math.floor(z / REND_CUBE_SIZE) * REND_CUBES_X * REND_CUBES_Y;
 			dirtyFlags[i] = true;
 		}
@@ -390,8 +395,6 @@ function World(gl) {
 	function physical(block) {
 		return block > 0 && block != 6;
 	}
-	var lastChunk;
-	var RS = 128;
 	function getChunk(x, y, z) {
 		var cx = Math.floor(x / CHUNK_WIDTH_X);
 		var cy = Math.floor(y / CHUNK_WIDTH_Y);
@@ -399,17 +402,22 @@ function World(gl) {
 		if(cy != 0)
 			return undefined;
 		var coord = [cx, cy, cz];
-		if(lastChunk && lastChunk.coord == coord) return lastChunk;
-		var chunk = chunks[(cx > 0) | (cz > 0) << 1 | (cy > 0) << 2][Math.abs(cx) + Math.abs(cz) * RS + Math.abs(cy) * RS * RS];
-		if(chunk == undefined) {
-			if(noCreate)
-				return undefined;
+		var wi = (cx & CHUNK_WINDOW_SIZE - 1) +
+			(cz & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE +
+			(cy & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE * CHUNK_WINDOW_SIZE;
+		var chunk = chunkWindow[wi];
+		if(chunk == "queued") {
+			return undefined;
+		}else if(!(
+			chunk &&
+			chunk.coord[0] == coord[0] &&
+			chunk.coord[1] == coord[1] &&
+			chunk.coord[2] == coord[2]
+		)) {
 			chunkGenerator.postMessage(coord);
-			chunks[(cx > 0) | (cz > 0) << 1 | (cy > 0) << 2][Math.abs(cx) + Math.abs(cz) * RS + Math.abs(cy) * RS * RS] = {coord: "queued"};
-		}else if(chunk.coord == "queued") {
+			chunkWindow[wi] = "queued";
 			return undefined;
 		}
-		lastChunk = chunk;
 		return chunk;
 	}
 	function initLight(coord) {
