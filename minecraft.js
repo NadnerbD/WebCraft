@@ -159,11 +159,10 @@ function ResPool(resConstructor) {
 }
 
 function World(gl) {
-	var chunkPool = new Array();
-	var chunkPoolUse = new Array();
 	// must be a power of 2
 	var CHUNK_WINDOW_SIZE = 64;
 	var chunkWindow = new Array();
+	var chunkPool = new ResPool(Object);
 
 	this.createBuffers = function() {
 		return {
@@ -190,7 +189,8 @@ function World(gl) {
 	var self = this;
 
 	this.smoothLighting = true;
-	this.poolSize = meshPool.poolSize;
+	this.meshPoolSize = meshPool.poolSize;
+	this.chunkPoolSize = chunkPool.poolSize;
 
 	this.entities = new Array();
 	this.Entity = function (pos) {
@@ -228,7 +228,12 @@ function World(gl) {
 		var wi = (cx & CHUNK_WINDOW_SIZE - 1) +
 			(cz & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE +
 			(cy & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE * CHUNK_WINDOW_SIZE;
-		chunkWindow[wi] = new Chunk(msg.data[0], msg.data[1]);
+		var poolId = chunkWindow[wi];
+		if(poolId == undefined) {
+			console.log("Chunk target was removed before chunk gen completed");
+			return;
+		}
+		chunkPool.get(poolId).data = new Chunk(msg.data[0], msg.data[1]);
 		// these updates take a massively long time for some reason
 		//initLight(msg.data[0]);
 	};
@@ -353,6 +358,7 @@ function World(gl) {
 		// record which meshes get used in this frame
 		// meshes that were not used in the last 2 frames can be reclaimed by new mesh gens
 		meshPool.decUsage();
+		chunkPool.decUsage();
 		for(var d = 0; d <= drawDist; d++) {
 			for(var dx = 0 - d; dx < 1 + d; dx++) {
 				for(var dy = 0 - d; dy < 1 + d; dy++) {
@@ -429,20 +435,24 @@ function World(gl) {
 		var wi = (cx & CHUNK_WINDOW_SIZE - 1) +
 			(cz & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE +
 			(cy & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE * CHUNK_WINDOW_SIZE;
-		var chunk = chunkWindow[wi];
-		if(chunk == "queued") {
-			return undefined;
-		}else if(!(
-			chunk &&
-			chunk.coord[0] == coord[0] &&
-			chunk.coord[1] == coord[1] &&
-			chunk.coord[2] == coord[2]
-		)) {
+		var poolId = chunkWindow[wi];
+		if(poolId == undefined) {
+			poolId = chunkPool.alloc();
+			var cc = chunkPool.get(poolId);
+			cc.data = "queued";
+			cc.remove = function() {
+				chunkWindow[wi] = undefined;
+			}
+			chunkWindow[wi] = poolId;
 			chunkGenerator.postMessage(coord);
-			chunkWindow[wi] = "queued";
 			return undefined;
+		}else{
+			var chunk = chunkPool.get(poolId).data;
+			if(chunk == "queued") {
+				return undefined;
+			}
+			return chunk;
 		}
-		return chunk;
 	}
 	function initLight(coord) {
 		var ofsx = coord[0] * CHUNK_WIDTH_X;
@@ -1409,7 +1419,8 @@ function main() {
 		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
 		// update the HUD
 		document.getElementById("selBlock").innerText = selectedBlock ? selectedBlock[0] : "";
-		document.getElementById("poolSize").innerText = world.poolSize();
+		document.getElementById("meshPoolSize").innerText = world.meshPoolSize();
+		document.getElementById("chunkPoolSize").innerText = world.chunkPoolSize();
 
 		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
 		world.meshGenTime = 0;
