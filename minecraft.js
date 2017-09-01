@@ -125,6 +125,38 @@ function initTexture(gl, filename) {
 	return texture;
 }
 
+function ResPool(resConstructor) {
+	var objects = new Array();
+	var usage = new Array();
+
+	this.alloc = function() {
+		var id = usage.indexOf(0);
+		if(id == -1) {
+			id = objects.length;
+			objects.push(resConstructor());
+		}else{
+			// this should be defined on alloc'd objects
+			// to remove external refs when object is reclaimed
+			objects[id].remove();
+		}
+		return id;
+	}
+
+	this.get = function(id) {
+		usage[id] = 2;
+		return objects[id];
+	}
+
+	this.decUsage = function() {
+		for(var id in usage) {
+			if(usage[id] > 0) usage[id] -= 1;
+		}
+	}
+
+	this.poolSize = function() {
+		return objects.length;
+	}
+}
 
 function World(gl) {
 	var chunkPool = new Array();
@@ -133,8 +165,19 @@ function World(gl) {
 	var CHUNK_WINDOW_SIZE = 64;
 	var chunkWindow = new Array();
 
-	var meshPool = new Array();
-	var meshPoolUse = new Array();
+	this.createBuffers = function() {
+		return {
+			posBuffer: gl.createBuffer(),
+			normalBuffer: gl.createBuffer(),
+			uvBuffer: gl.createBuffer(),
+			colorBuffer: gl.createBuffer(),
+			skyBuffer: gl.createBuffer(),
+			blockBuffer: gl.createBuffer(),
+			indexBuffer: gl.createBuffer()
+		};
+	}
+	var meshPool = new ResPool(this.createBuffers);
+
 	var CHUNK_WIDTH_X = 16;
 	var CHUNK_WIDTH_Y = 128;
 	var CHUNK_WIDTH_Z = 16;
@@ -147,9 +190,7 @@ function World(gl) {
 	var self = this;
 
 	this.smoothLighting = true;
-	this.poolSize = function() {
-		return meshPool.length;
-	}
+	this.poolSize = meshPool.poolSize;
 
 	this.entities = new Array();
 	this.Entity = function (pos) {
@@ -273,43 +314,29 @@ function World(gl) {
 				};
 
 				if(meshes[i] == undefined) {
-					// we have no mesh object
-					// get one from the pool, or if none are available, create one
-					var poolId = meshPoolUse.indexOf(0);
-					if(poolId == -1) {
-						var newMesh = world.generateMesh(bounds);
-						if(newMesh != undefined) {
-							poolId = meshPool.length;
-							meshPool.push(newMesh);
-
-							meshes[i] = poolId;
-							newMesh.poolId = poolId;
-							newMesh.remove = function() {
-								meshes[i] = undefined;
-							};
+					// try to generate the mesh, and allocate a buffer if successful
+					var newMeshData = world.generateMesh(bounds);
+					if(newMeshData != undefined) {
+						var poolId = meshPool.alloc();
+						var newMesh = meshPool.get(poolId);
+						meshes[i] = poolId;
+						newMesh.remove = function() {
+							meshes[i] = undefined;
 						}
-					}else{
-						var newMesh = world.generateMesh(bounds, meshPool[poolId]);
-						if(newMesh != undefined) {
-							meshPool[poolId].remove();
-
-							meshes[i] = poolId;
-							newMesh.poolId = poolId;
-							newMesh.remove = function() {
-								meshes[i] = undefined;
-							};
-						}
+						initObjectBuffers(gl, newMeshData, "chunk", newMesh);
 					}
 				}else if(dirtyFlags[i] == true) {
 					// we force the update if it's dirty to avoid making holes in the world
-					if(world.generateMesh(bounds, meshPool[meshes[i]], true) != undefined) {
+					var newMeshData = world.generateMesh(bounds, true);
+					if(newMeshData != undefined) {
+						initObjectBuffers(gl, newMeshData, "chunk", meshPool.get(meshes[i]));
 						dirtyFlags[i] = false;
 					}
 				}
 			}
 
 			// return the mesh
-			return meshPool[meshes[i]];
+			return meshPool.get(meshes[i]);
 		}
 	}
 
@@ -325,9 +352,7 @@ function World(gl) {
 		var meshes = [];
 		// record which meshes get used in this frame
 		// meshes that were not used in the last 2 frames can be reclaimed by new mesh gens
-		for(var i in meshPoolUse) {
-			if(meshPoolUse[i] > 0) meshPoolUse[i] -= 1;
-		}
+		meshPool.decUsage();
 		for(var d = 0; d <= drawDist; d++) {
 			for(var dx = 0 - d; dx < 1 + d; dx++) {
 				for(var dy = 0 - d; dy < 1 + d; dy++) {
@@ -345,7 +370,6 @@ function World(gl) {
 								var mesh = chunk.getMesh(cx, cy, cz, self);
 								if(mesh != undefined) {
 									meshes.push(mesh);
-									meshPoolUse[mesh.poolId] = 2;
 								}
 							}
 						}
@@ -801,7 +825,7 @@ function World(gl) {
 	var MESH_TIME_PER_FRAME = 20;
 	this.meshGenTime = 0;
 	this.meshesGenerated = 0;
-	this.generateMesh = function(bounds, initMesh, force) {
+	this.generateMesh = function(bounds, force) {
 		if(!(self.meshGenTime < MESH_TIME_PER_FRAME) && !force)
 			return undefined;
 		this.meshesGenerated++;
@@ -815,6 +839,9 @@ function World(gl) {
 		output.skyLight = new Array();
 		output.blockLight = new Array();
 		output.matColors = new Array();
+		output.location = bounds.min;
+		output.rotation = [0, 0, 1, 0];
+		output.scale = [1, 1, 1];
 		for(var z = bounds.min[2]; z < bounds.max[2]; z++) {
 			for(var x = bounds.min[0]; x < bounds.max[0]; x++) {
 				var biome = biomeNoise.sample(x, 0, z);
@@ -831,12 +858,8 @@ function World(gl) {
 				}
 			}
 		}
-		outputBuffer = initObjectBuffers(gl, output, "chunk", initMesh);
-		outputBuffer.location = bounds.min;
-		outputBuffer.rotation = [0, 0, 1, 0];
-		outputBuffer.scale = [1, 1, 1];
 		self.meshGenTime += new Date().getTime() - startTime;
-		return outputBuffer;
+		return output;
 	}
 	function stepToNextBlock(block, offset, dir) {
 		// steps block based on dir and offset
@@ -1010,25 +1033,12 @@ function World(gl) {
 	}
 }
 
-function initObjectBuffers(gl, obj, name, buffers) {
-	var out;
-	if(!buffers) {
-		out = {
-			posBuffer: gl.createBuffer(),
-			normalBuffer: gl.createBuffer(),
-			uvBuffer: gl.createBuffer(),
-			colorBuffer: gl.createBuffer(),
-			skyBuffer: gl.createBuffer(),
-			blockBuffer: gl.createBuffer(),
-			indexBuffer: gl.createBuffer(),
-			location: obj.location,
-			rotation: obj.rotation,
-			scale: obj.scale, 
-			name: name
-		};
-	}else{
-		out = buffers;
-	}
+
+function initObjectBuffers(gl, obj, name, out) {
+	out.location = obj.location;
+	out.rotation = obj.rotation;
+	out.scale = obj.scale;
+	out.name = name;
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, out.posBuffer);
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(obj.vertices), gl.STATIC_DRAW);
@@ -1204,6 +1214,8 @@ function main() {
 	var itemTexture = initTexture(gl, "items.png");
 	var crossTexture = initTexture(gl, "crosshair.png");
 
+	var world = new World(gl);
+
 	var selector = {
 		vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0,  1, 1, 0,  0, 0, 1,  1, 0, 1,  0, 1, 1,  1, 1, 1],
 		matColors: [0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0],
@@ -1217,9 +1229,9 @@ function main() {
 		scale: [1.01, 1.01, 1.01]
 	};
 	var selectorBuffers = new Array();
-	selectorBuffers.push(initObjectBuffers(gl, selector, "selector"));
+	selectorBuffers.push(initObjectBuffers(gl, selector, "selector", world.createBuffers()));
 	selector.scale = [0.01, 0.01, 0.01];
-	selectorBuffers.push(initObjectBuffers(gl, selector, "selector"));
+	selectorBuffers.push(initObjectBuffers(gl, selector, "selector", world.createBuffers()));
 
 	var crosshair = {
 		vertices: [-1, -1, 0,  1, -1, 0,  1, 1, 0,  -1, 1, 0],
@@ -1233,9 +1245,7 @@ function main() {
 		rotation: [0, 0, 1, 0],
 		scale: [0.025, 0.025, 0.025]
 	};
-	var crosshairBuffer = initObjectBuffers(gl, crosshair, "crosshair");
-
-	var world = new World(gl);
+	var crosshairBuffer = initObjectBuffers(gl, crosshair, "crosshair", world.createBuffers());
 
 	/*model.push(initObjectBuffers(gl, Mesh.Head, "head"));
 	model.push(initObjectBuffers(gl, Mesh.Mask, "mask"));
