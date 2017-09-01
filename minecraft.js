@@ -447,11 +447,17 @@ function World(gl) {
 			chunkGenerator.postMessage(coord);
 			return undefined;
 		}else{
-			var chunk = chunkPool.get(poolId).data;
-			if(chunk == "queued") {
+			var cc = chunkPool.get(poolId);
+			if(cc.data == "queued") {
 				return undefined;
 			}
-			return chunk;
+			var cco = cc.data.coord;
+			if(!(cco[0] == coord[0] && cco[1] == coord[1] && cco[2] == coord[2])) {
+				console.log("Incorrect chunk found in chunk window (req:" + coord + " found:" + cco + ")");
+				cc.remove();
+				return undefined;
+			}
+			return cc.data;
 		}
 	}
 	function initLight(coord) {
