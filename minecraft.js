@@ -1413,29 +1413,32 @@ function main() {
 		}
 	}, false);
 
+	var tickLen = 31.25;
 	var lastTime = 0;
 	var timeSamples = new Array(30);
 	var timeIndex = 0;
 	var dayRot = 0;
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
+	var lastPos = [vec3.create([0, 0, 0])];
+	var displayPos = [vec3.create([0, 0, 0])];
 
 	setInterval(function() {
 		var dirs = eulerToMat(camRot);
-		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], world.entities[0].pos), [-dirs[2], -dirs[6], -dirs[10]], 20);
+		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], displayPos[0]), [-dirs[2], -dirs[6], -dirs[10]], 20);
 		// update the HUD
 		document.getElementById("selBlock").innerText = selectedBlock ? selectedBlock[0] : "";
 		document.getElementById("meshPoolSize").innerText = world.meshPoolSize();
 		document.getElementById("chunkPoolSize").innerText = world.chunkPoolSize();
 
-		var camPos = vec3.add([0, 0.65, 0], world.entities[0].pos);
+		var camPos = vec3.add([0, 0.65, 0], displayPos[0]);
 		world.meshGenTime = 0;
 		world.meshesGenerated = 0;
 
 		var model = world.getMeshes(
-			world.entities[0].pos[0],
-			world.entities[0].pos[1],
-			world.entities[0].pos[2],
+			displayPos[0][0],
+			displayPos[0][1],
+			displayPos[0][2],
 			DRAW_DIST
 		);
 
@@ -1482,16 +1485,28 @@ function main() {
 			// progress the simulation to the current time
 			var currentTime = new Date().getTime();
 			while(gameTime < currentTime) {
+				lastPos = [];
+				for(var ent of world.entities) {
+					lastPos.push(vec3.create(ent.pos));
+				}
 				world.tick();
-				gameTime += 31.25;
+				gameTime += tickLen;
 				if(currentTime - gameTime > 2000) {
 					console.log("can't keep up");
 					gameTime = currentTime;
 				}
 			}
+			displayPos = [];
+			for(var ent in world.entities) {
+				// gameTime can be greater than currentTime by up to one tick length
+				var blend = (gameTime - currentTime) / tickLen;
+				var diff = vec3.subtract(vec3.create(lastPos[ent]), world.entities[ent].pos);
+				var interp = vec3.add(vec3.create(world.entities[ent].pos), vec3.scale(diff, blend));
+				displayPos.push(interp);
+			}
 		}
 		lastTime = timeNow;
-	}, 30);
+	}, 15);
 
 	return canvas;
 }
