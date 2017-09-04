@@ -441,10 +441,11 @@ function World(gl) {
 			var cc = chunkPool.get(poolId);
 			cc.data = "queued";
 			cc.remove = function() {
+				if(cc.data == "queued") chunkGenerator.postMessage({action: "cancel", coord: coord});
 				chunkWindow[wi] = undefined;
 			}
 			chunkWindow[wi] = poolId;
-			chunkGenerator.postMessage(coord);
+			chunkGenerator.postMessage({action: "gen", coord: coord});
 			return undefined;
 		}else{
 			var cc = chunkPool.get(poolId);

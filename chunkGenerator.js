@@ -140,6 +140,29 @@ function Chunk(coord) {
 }
 
 // produce a chunk for a given coordinate on demand
+var chunkQueue = new Array();
+
 self.onmessage = function (msg) {
-	self.postMessage([msg.data, new Chunk(msg.data)]);
+	var a = msg.data.action;
+	var c = msg.data.coord;
+	if(a == "gen") {
+		// ignore duplicate requests
+		for(var i of chunkQueue) {
+			if(i[0] == c[0] && i[1] == c[1] && i[2] == c[2]) return;
+		}
+		chunkQueue.push(c);
+	}else if(a == "cancel") {
+		for(var i of chunkQueue) {
+			if(i[0] == c[0] && i[1] == c[1] && i[2] == c[2]) chunkQueue.splice(chunkQueue.indexOf(i), 1);
+		}
+	}
 }
+
+function produceChunk() {
+	if(chunkQueue.length) {
+		var coord = chunkQueue.shift();
+		self.postMessage([coord, new Chunk(coord)]);
+	}
+}
+
+setInterval(produceChunk, 0);
