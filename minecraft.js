@@ -839,7 +839,7 @@ function World(gl) {
 	}
 
 	var biomeNoise = new SimplexNoise(1, 16);
-	var MESH_TIME_PER_FRAME = 20;
+	var MESH_TIME_PER_FRAME = 10;
 	this.meshGenTime = 0;
 	this.meshesGenerated = 0;
 	this.generateMesh = function(bounds, force) {
