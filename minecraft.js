@@ -45,7 +45,7 @@ void main(void) { \n\
 
 function initGL(canvas) {
 	try {
-		var gl = canvas.getContext("webgl", {antialias: false});
+		var gl = canvas.getContext("experimental-webgl", {antialias: false});
 	} catch (e) {
 		return null;
 	}
