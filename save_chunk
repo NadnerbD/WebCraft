@@ -1,0 +1,17 @@
+#!/usr/bin/python
+
+import cgitb
+cgitb._reset = cgitb.reset
+cgitb.reset = lambda: cgitb._reset().replace('<!--: spam\n', '')
+cgitb.enable()
+
+import os, sys, json
+
+data = sys.stdin.read()
+
+out_file = open("chunks/chunk_%d_%d_%d.json.gz" % tuple(json.loads(os.environ['HTTP_X_COORD'])), "wb")
+out_file.write(data)
+out_file.close()
+
+print "Status: 204"
+print ""

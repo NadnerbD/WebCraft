@@ -222,9 +222,9 @@ function World(gl) {
 	var chunkGenerator = new Worker('chunkGenerator.js');
 	// add chunks to chunk list when we recieve them from the generator
 	chunkGenerator.onmessage = function(msg) {
-		var cx = msg.data[0][0];
-		var cy = msg.data[0][1];
-		var cz = msg.data[0][2];
+		var cx = msg.data.coord[0];
+		var cy = msg.data.coord[1];
+		var cz = msg.data.coord[2];
 		var wi = (cx & CHUNK_WINDOW_SIZE - 1) +
 			(cz & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE +
 			(cy & CHUNK_WINDOW_SIZE - 1) * CHUNK_WINDOW_SIZE * CHUNK_WINDOW_SIZE;
@@ -233,20 +233,19 @@ function World(gl) {
 			console.log("Chunk target was removed before chunk gen completed");
 			return;
 		}
-		chunkPool.get(poolId).data = new Chunk(msg.data[0], msg.data[1]);
+		chunkPool.get(poolId).data = new Chunk(msg.data);
 		// these updates take a massively long time for some reason
 		//initLight(msg.data[0]);
 	};
 
-	function Chunk(coord, data) {
+	function Chunk(data) {
 		// init locals
 		var self = this;
-		var coord = coord;
 		var meshCount = REND_CUBES_X * REND_CUBES_Y * REND_CUBES_Z;
 		var meshes = new Array(meshCount);
 		var dirtyFlags = new Array(meshCount);
 
-		this.coord = coord;
+		this.coord = data.coord;
 		this.data = data.data;
 		this.blocks = data.blocks;
 		this.skyLight = data.skyLight;
@@ -292,9 +291,9 @@ function World(gl) {
 		this.getMesh = function(gx, gy, gz, world) {
 			// inputs are in global REND_CUBE coords
 			// convert to local REND_CUBE coords
-			x = gx - coord[0] * REND_CUBES_X;
-			y = gy - coord[1] * REND_CUBES_Y;
-			z = gz - coord[2] * REND_CUBES_Z;
+			x = gx - self.coord[0] * REND_CUBES_X;
+			y = gy - self.coord[1] * REND_CUBES_Y;
+			z = gz - self.coord[2] * REND_CUBES_Z;
 
 			// Check if coords are valid
 			if(x < 0 || y < 0 || z < 0 || x >= REND_CUBES_X || y >= REND_CUBES_Y || z >= REND_CUBES_Z) {
@@ -311,7 +310,7 @@ function World(gl) {
 				if(!neighborsExist(gx, gy, gz)) return undefined;
 
 				// this info is only needed if we're regenerating the chunk
-				var gc = [coord[0] * CHUNK_WIDTH_X, coord[1] * CHUNK_WIDTH_Y, coord[2] * CHUNK_WIDTH_Z];
+				var gc = [self.coord[0] * CHUNK_WIDTH_X, self.coord[1] * CHUNK_WIDTH_Y, self.coord[2] * CHUNK_WIDTH_Z];
 				var min = [x * REND_CUBE_SIZE + gc[0], y * REND_CUBE_SIZE + gc[1], z * REND_CUBE_SIZE + gc[2]];
 				var bounds = {
 					min: min,

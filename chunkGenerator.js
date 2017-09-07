@@ -1,4 +1,4 @@
-importScripts("simplex.js", "glMatrix-0.9.5.min.js");
+importScripts("simplex.js", "glMatrix-0.9.5.min.js", "pako.min.js");
 
 // 6 octaves, max feature size of 128
 var terrainNoise = new SimplexNoise(6, 128);
@@ -13,6 +13,7 @@ function Chunk(coord) {
 	// this is a subset of the Chunk object as used in minecraft.js
 	// it does not add function members as the real article does, because
 	// function objects cannot be transferred through postMessage
+	this.coord = coord;
 	this.data = new Array(chunkLen);
 	this.blocks = new Array(chunkLen);
 	this.skyLight = new Array(chunkLen);
@@ -150,8 +151,22 @@ self.onmessage = function (msg) {
 		for(var i of chunkQueue) {
 			if(i[0] == c[0] && i[1] == c[1] && i[2] == c[2]) return;
 		}
-		chunkQueue.push(c);
+		// check if the server has a copy of the chunk
+		var req = new XMLHttpRequest();
+		req.open("GET", "chunks/chunk_" + c[0] + "_" + c[1] + "_" + c[2] + ".json.gz");
+		req.onreadystatechange = function() {
+			if(req.readyState != req.DONE) return;
+			if(req.status == 200) {
+				// we found a chunk!
+				postMessage(JSON.parse(req.responseText));
+			}else{
+				// not found, generate it ourselves
+				chunkQueue.push(c);
+			}
+		}
+		req.send();
 	}else if(a == "cancel") {
+		// remove the coord from the queue
 		for(var i of chunkQueue) {
 			if(i[0] == c[0] && i[1] == c[1] && i[2] == c[2]) chunkQueue.splice(chunkQueue.indexOf(i), 1);
 		}
@@ -161,7 +176,14 @@ self.onmessage = function (msg) {
 function produceChunk() {
 	if(chunkQueue.length) {
 		var coord = chunkQueue.shift();
-		self.postMessage([coord, new Chunk(coord)]);
+		var chunk = new Chunk(coord);
+		postMessage(chunk);
+		// if we generated the chunk, send it to the server
+		var req = new XMLHttpRequest();
+		req.open("POST", "save_chunk");
+		req.setRequestHeader("X-Coord", JSON.stringify(chunk.coord));
+		req.setRequestHeader("Content-Encoding", "gzip");
+		req.send(pako.gzip(JSON.stringify(chunk)));
 	}
 }
 
