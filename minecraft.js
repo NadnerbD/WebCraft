@@ -1123,6 +1123,75 @@ function eulerToMat(euler) {
 	return mat;
 }
 
+function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack) {
+	for(var i in model) {
+		if(model[i].name == "chunk") {
+			gl.enable(gl.CULL_FACE);
+			gl.uniform1i(shaderProgram.samplerUniform, 0);
+		}else if(model[i].name == "selector") {
+			gl.disable(gl.CULL_FACE);
+			gl.uniform1i(shaderProgram.samplerUniform, 2);
+			gl.lineWidth(2);
+		}else if(model[i].name == "item") {
+			gl.enable(gl.CULL_FACE);
+			gl.uniform1i(shaderProgram.samplerUniform, 1);
+		}else if(model[i].name == "crosshair") {
+			gl.disable(gl.CULL_FACE);
+			gl.uniform1i(shaderProgram.samplerUniform, 2);
+		}else{
+			gl.disable(gl.CULL_FACE);
+			gl.uniform1i(shaderProgram.samplerUniform, 3); // player skin
+		}
+
+		mvPushMatrix(mvMatrixStack, mvMatrix);
+
+		if(model[i].name == "crosshair") {
+			mat4.identity(mvMatrix);
+			gl.disable(gl.DEPTH_TEST);
+		}else{
+			gl.enable(gl.DEPTH_TEST);
+		}
+
+		mat4.translate(mvMatrix, model[i].location);
+		mat4.rotate(mvMatrix, model[i].rotation[0], [model[i].rotation[1], model[i].rotation[2], model[i].rotation[3]]); 
+		mat4.scale(mvMatrix, model[i].scale);
+
+		if(model[i].subModel) {
+			drawModel(gl, shaderProgram, model[i].subModel, mvMatrix, mvMatrixStack);
+		}else{
+			gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].posBuffer);
+			gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, model[i].posBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].normalBuffer);
+			gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, model[i].normalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].uvBuffer);
+			gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, model[i].uvBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].colorBuffer);
+			gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, model[i].colorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].skyBuffer);
+			gl.vertexAttribPointer(shaderProgram.vertexSkyLightAttribute, model[i].skyBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].blockBuffer);
+			gl.vertexAttribPointer(shaderProgram.vertexBlockLightAttribute, model[i].blockBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, model[i].indexBuffer);
+
+			if(model[i].name == "selector") {
+				gl.drawElements(gl.LINES, model[i].indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+			}else{
+				gl.drawElements(gl.TRIANGLES, model[i].indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+			}
+		}
+
+		mvMatrix = mvPopMatrix(mvMatrixStack);
+	}
+}
+
 function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	// if the canvas display size changes, change the canvas image size to match
 	var canvas = gl.canvas;
@@ -1140,7 +1209,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	var pMatrix = mat4.create();
 	mat4.perspective(70, gl.drawingBufferWidth / gl.drawingBufferHeight, 0.1, 256.0, pMatrix);
 	gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
-	
+
 	var mvMatrixStack = [];
 	var mvMatrix = mat4.create();
 	mat4.identity(mvMatrix);
@@ -1160,64 +1229,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	gl.uniform3fv(shaderProgram.skyDifUniform, sky[1]);
 	gl.uniform3fv(shaderProgram.skyAmbUniform, sky[2]);
 
-	for(var i in model) {
-		if(model[i].name == "chunk") {
-			gl.enable(gl.CULL_FACE);
-			gl.uniform1i(shaderProgram.samplerUniform, 0);
-		}else if(model[i].name == "selector") {
-			gl.disable(gl.CULL_FACE);
-			gl.uniform1i(shaderProgram.samplerUniform, 2);
-			gl.lineWidth(2);
-		}else if(model[i].name == "item") {
-			gl.uniform1i(shaderProgram.samplerUniform, 1);
-		}else if(model[i].name == "crosshair") {
-			gl.disable(gl.CULL_FACE);
-			gl.uniform1i(shaderProgram.samplerUniform, 2);
-		}
-
-		mvPushMatrix(mvMatrixStack, mvMatrix);
-
-		if(model[i].name == "crosshair") {
-			mat4.identity(mvMatrix);
-			gl.disable(gl.DEPTH_TEST);
-		}else{
-			gl.enable(gl.DEPTH_TEST);
-		}
-
-		mat4.translate(mvMatrix, model[i].location);
-		mat4.rotate(mvMatrix, model[i].rotation[0], [model[i].rotation[1], model[i].rotation[2], model[i].rotation[3]]); 
-		mat4.scale(mvMatrix, model[i].scale);
-
-		gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
-
-		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].posBuffer);
-		gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, model[i].posBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].normalBuffer);
-		gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, model[i].normalBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].uvBuffer);
-		gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, model[i].uvBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].colorBuffer);
-		gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, model[i].colorBuffer.itemSize, gl.FLOAT, false, 0, 0);
-		
-		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].skyBuffer);
-		gl.vertexAttribPointer(shaderProgram.vertexSkyLightAttribute, model[i].skyBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-		gl.bindBuffer(gl.ARRAY_BUFFER, model[i].blockBuffer);
-		gl.vertexAttribPointer(shaderProgram.vertexBlockLightAttribute, model[i].blockBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, model[i].indexBuffer);
-
-		if(model[i].name == "selector") {
-			gl.drawElements(gl.LINES, model[i].indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
-		}else{
-			gl.drawElements(gl.TRIANGLES, model[i].indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
-		}
-
-		mvMatrix = mvPopMatrix(mvMatrixStack);
-	}
+	drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack);
 }
 
 function main() {
@@ -1228,7 +1240,7 @@ function main() {
 	if(!gl)
 		return null;
 	var shaderProgram = initShaders(gl);
-	//var skinTexture = initTexture(gl, filename);
+	var skinTexture = initTexture(gl, "Nadnerb.png");
 	var terrainTexture = initTexture(gl, "terrain.png");
 	var itemTexture = initTexture(gl, "items.png");
 	var crossTexture = initTexture(gl, "crosshair.png");
@@ -1266,14 +1278,17 @@ function main() {
 	};
 	var crosshairBuffer = initObjectBuffers(gl, crosshair, "crosshair", world.createBuffers());
 
-	/*model.push(initObjectBuffers(gl, Mesh.Head, "head"));
-	model.push(initObjectBuffers(gl, Mesh.Mask, "mask"));
-	model.push(initObjectBuffers(gl, Mesh.Body, "body"));
-	model.push(initObjectBuffers(gl, Mesh.ArmLeft, "arml"));
-	model.push(initObjectBuffers(gl, Mesh.ArmRight, "armr"));
-	model.push(initObjectBuffers(gl, Mesh.LegLeft, "legl"));
-	model.push(initObjectBuffers(gl, Mesh.LegRight, "legr"));
-	model.push(initObjectBuffers(gl, Mesh.Item, "item"));*/
+	var playerModel = [
+		initObjectBuffers(gl, Mesh.Head, "head", world.createBuffers()),
+		initObjectBuffers(gl, Mesh.Mask, "mask", world.createBuffers()),
+		initObjectBuffers(gl, Mesh.Body, "body", world.createBuffers()),
+		initObjectBuffers(gl, Mesh.ArmLeft, "arml", world.createBuffers()),
+		initObjectBuffers(gl, Mesh.ArmRight, "armr", world.createBuffers()),
+		initObjectBuffers(gl, Mesh.LegLeft, "legl", world.createBuffers()),
+		initObjectBuffers(gl, Mesh.LegRight, "legr", world.createBuffers()),
+		initObjectBuffers(gl, Mesh.Item, "item", world.createBuffers())
+	];
+
 
 	var sky = [
 		vec3.create([0.707, -0.707, 0]), // direction
@@ -1283,6 +1298,7 @@ function main() {
 
 	//var camPos = [-20, 50, 30];
 	world.entities[0] = new world.Entity([8, 130, 8]);
+	world.entities[1] = new world.Entity([8, 130, 8]);
 	var camRot = [45, 45, 0];
 
 	// number of chunks from the current chunk to display
@@ -1452,9 +1468,19 @@ function main() {
 			model = model.concat(selectorBuffers);
 		}
 
-		model = model.concat([crosshairBuffer]);
+		// add models for player entities
+		for(var ei = 1; ei < displayPos.length; ei++) {
+			model.push({
+				subModel: playerModel,
+				location: vec3.add([0, -0.85, 0], displayPos[ei]),
+				rotation: [0, 0, 1, 0],
+				scale: [0.85, 0.85, 0.85]
+			});
+		}
 
-		drawScene(gl, shaderProgram, [terrainTexture, itemTexture, crossTexture], model, camPos, camRot, sky);
+		model.push(crosshairBuffer);
+
+		drawScene(gl, shaderProgram, [terrainTexture, itemTexture, crossTexture, skinTexture], model, camPos, camRot, sky);
 
 		var timeNow = new Date().getTime();
 		if(lastTime != 0) {
