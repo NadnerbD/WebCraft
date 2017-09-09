@@ -5,6 +5,8 @@ attribute vec3 aVertexColor; \n\
 attribute vec3 aNormal; \n\
 attribute float aSkyLight; \n\
 attribute float aBlockLight; \n\
+uniform float uSkyLight; \n\
+uniform float uBlockLight; \n\
 uniform mat4 uMVMatrix; \n\
 uniform mat4 uPMatrix; \n\
 uniform vec3 uSkyLightDir; \n\
@@ -17,8 +19,8 @@ void main(void) { \n\
 	vPosition = uMVMatrix * vec4(aVertexPosition, 1.0); \n\
 	gl_Position = uPMatrix * vPosition; \n\
 	vTextureCoord = aTextureCoord; \n\
-	vec3 skyLightColor = (uSkyLightAmbientColor + max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor) * aSkyLight; \n\
-	vec3 blockLightColor =  vec3(1, 1, 1) * aBlockLight; \n\
+	vec3 skyLightColor = (uSkyLightAmbientColor + max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor) * aSkyLight * uSkyLight; \n\
+	vec3 blockLightColor =  vec3(1, 1, 1) * aBlockLight * uBlockLight; \n\
 	vVertexColor = aVertexColor * max(skyLightColor, blockLightColor); \n\
 } \n\
 ";
@@ -106,6 +108,8 @@ function initShaders(gl) {
 	shaderProgram.skyDirUniform = gl.getUniformLocation(shaderProgram, "uSkyLightDir");
 	shaderProgram.skyDifUniform = gl.getUniformLocation(shaderProgram, "uSkyLightDiffuseColor");
 	shaderProgram.skyAmbUniform = gl.getUniformLocation(shaderProgram, "uSkyLightAmbientColor");
+	shaderProgram.skyLightUniform = gl.getUniformLocation(shaderProgram, "uSkyLight");
+	shaderProgram.blockLightUniform = gl.getUniformLocation(shaderProgram, "uBlockLight");
 
 	return shaderProgram;
 }
@@ -191,6 +195,9 @@ function World(gl) {
 	this.smoothLighting = true;
 	this.meshPoolSize = meshPool.poolSize;
 	this.chunkPoolSize = chunkPool.poolSize;
+
+	this.getData = getData;
+	this.MAX_LIGHT = MAX_LIGHT;
 
 	this.entities = new Array();
 	this.Entity = function (pos) {
@@ -1123,7 +1130,7 @@ function eulerToMat(euler) {
 	return mat;
 }
 
-function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack) {
+function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack, sl, bl) {
 	for(var i in model) {
 		if(model[i].name == "chunk") {
 			gl.enable(gl.CULL_FACE);
@@ -1157,9 +1164,12 @@ function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack) {
 		mat4.scale(mvMatrix, model[i].scale);
 
 		if(model[i].subModel) {
-			drawModel(gl, shaderProgram, model[i].subModel, mvMatrix, mvMatrixStack);
+			drawModel(gl, shaderProgram, model[i].subModel, mvMatrix, mvMatrixStack, model[i].skyLight, model[i].blockLight);
 		}else{
 			gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+
+			gl.uniform1f(shaderProgram.skyLightUniform, sl == undefined ? 1.0 : sl);
+			gl.uniform1f(shaderProgram.blockLightUniform, bl == undefined ? 1.0 : bl);
 
 			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].posBuffer);
 			gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, model[i].posBuffer.itemSize, gl.FLOAT, false, 0, 0);
@@ -1470,11 +1480,16 @@ function main() {
 
 		// add models for player entities
 		for(var ei = 1; ei < displayPos.length; ei++) {
+			var ep = displayPos[ei];
+			var esl = world.getData(Math.floor(ep[0]), Math.floor(ep[1]), Math.floor(ep[2]), "skyLight");
+			var ebl = world.getData(Math.floor(ep[0]), Math.floor(ep[1]), Math.floor(ep[2]), "blockLight");
 			model.push({
 				subModel: playerModel,
-				location: vec3.add([0, -0.85, 0], displayPos[ei]),
+				location: vec3.add([0, -0.85, 0], ep),
 				rotation: [0, 0, 1, 0],
-				scale: [0.85, 0.85, 0.85]
+				scale: [0.85, 0.85, 0.85],
+				skyLight: Math.pow(0.8, world.MAX_LIGHT - esl),
+				blockLight: Math.pow(0.8, world.MAX_LIGHT - ebl)
 			});
 		}
 
