@@ -142,10 +142,12 @@ function Chunk(coord) {
 
 // produce a chunk for a given coordinate on demand
 var chunkQueue = new Array();
+var changeBatch = new Object();
 
 self.onmessage = function (msg) {
-	var a = msg.data.action;
-	var c = msg.data.coord;
+	var d = msg.data;
+	var a = d.action;
+	var c = d.coord;
 	if(a == "gen") {
 		// ignore duplicate requests
 		for(var i of chunkQueue) {
@@ -170,6 +172,10 @@ self.onmessage = function (msg) {
 		for(var i of chunkQueue) {
 			if(i[0] == c[0] && i[1] == c[1] && i[2] == c[2]) chunkQueue.splice(chunkQueue.indexOf(i), 1);
 		}
+	}else if(a == "edit") {
+		if(!changeBatch[d.chunk]) changeBatch[d.chunk] = {};
+		if(!changeBatch[d.chunk][d.channel]) changeBatch[d.chunk][d.channel] = [];
+		changeBatch[d.chunk][d.channel].push([d.index, d.value]);
 	}
 }
 
@@ -187,4 +193,15 @@ function produceChunk() {
 	}
 }
 
+function sendChanges() {
+	if(Object.keys(changeBatch).length != 0) {
+		var req = new XMLHttpRequest();
+		req.open("POST", "edit_chunks");
+		req.setRequestHeader("Content-Encoding", "gzip");
+		req.send(pako.gzip(JSON.stringify(changeBatch)));
+		changeBatch = new Object();
+	}
+}
+
 setInterval(produceChunk, 0);
+setInterval(sendChanges, 60);

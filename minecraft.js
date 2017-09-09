@@ -268,7 +268,10 @@ function World(gl) {
 		}
 
 		this.setData = function(x, y, z, channel, data) {
-			self[channel][coToI(x, y, z)] = data;
+			var i = coToI(x, y, z);
+			self[channel][i] = data;
+			// we shouldn't be saving intermediate values
+			if(data != -1) chunkGenerator.postMessage({action: "edit", chunk: JSON.stringify(self.coord), channel: channel, index: i, value: data});
 		}
 
 		function neighborsExist(gx, gy, gz) {
