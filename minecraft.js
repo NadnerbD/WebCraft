@@ -222,6 +222,19 @@ function World(gl) {
 				vec3.add(ent.vel, vec3.scale(vec3.create(ent.walkForce), flyCoeff));
 			}
 			vec3.add(ent.vel, [0, -9.8 / 320, 0]);
+			// push away from nearby entities
+			for(var j = 0; j < self.entities.length; j++) {
+				if (j != i) {
+					var oent = self.entities[j];
+					var diff = vec3.subtract(vec3.create(ent.pos), oent.pos);
+					var len = vec3.length([
+						diff[0] / (ent.box[0] + oent.box[0]) * 2,
+						diff[1] / (ent.box[1] + oent.box[1]) * 2,
+						diff[2] / (ent.box[2] + oent.box[2]) * 2
+					]);
+					if(len < 1) vec3.add(ent.vel, vec3.scale(vec3.normalize(diff), 0.05));
+				}
+			}
 			ent.onGround = self.moveBox(ent.box, ent.pos, ent.vel);
 		}
 	}
@@ -1308,7 +1321,9 @@ function main() {
 
 	//var camPos = [-20, 50, 30];
 	world.entities[0] = new world.Entity([8, 130, 8]);
-	world.entities[1] = new world.Entity([8, 130, 8]);
+	for(var i = 0; i < 15; i++) {
+		world.entities.push(new world.Entity([10, 130, 10]));
+	}
 	var camRot = [45, 45, 0];
 
 	// number of chunks from the current chunk to display
