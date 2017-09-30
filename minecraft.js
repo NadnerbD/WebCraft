@@ -197,7 +197,17 @@ function World(gl) {
 	this.chunkPoolSize = chunkPool.poolSize;
 
 	this.getData = getData;
+	this.getChunk = getChunk;
 	this.MAX_LIGHT = MAX_LIGHT;
+	this.saveCurrentChunk = function() {
+		var p = this.entities[0].pos;
+		var chunk = this.getChunk(p[0], p[1], p[2]);
+		var req = new XMLHttpRequest();
+		req.open("POST", "save_chunk");
+		req.setRequestHeader("X-Coord", JSON.stringify(chunk.coord));
+		req.setRequestHeader("Content-Encoding", "gzip");
+		req.send(pako.gzip(JSON.stringify(chunk)));
+	}
 
 	this.entities = new Array();
 	this.Entity = function (pos) {
@@ -1269,6 +1279,7 @@ function main() {
 	var crossTexture = initTexture(gl, "crosshair.png");
 
 	var world = new World(gl);
+	window.world = world;
 
 	var selector = {
 		vertices: [0, 0, 0,  1, 0, 0,  0, 1, 0,  1, 1, 0,  0, 0, 1,  1, 0, 1,  0, 1, 1,  1, 1, 1],
