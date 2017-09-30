@@ -7,18 +7,18 @@ cgitb.enable()
 
 import os, sys, json, gzip, StringIO
 
-sio = StringIO.StringIO(sys.stdin.read())
+#sio = StringIO.StringIO(sys.stdin.read())
 
-data = json.load(gzip.GzipFile(fileobj=sio, mode='rb'))
+#data = json.load(gzip.GzipFile(fileobj=sio, mode='rb'))
 
-for key, channels in data.items():
-	filename = "chunks/chunk_%d_%d_%d.json.gz" % tuple(json.loads(key))
-	chunkobj = json.load(gzip.open(filename, 'rb'))
-	for cname, channel in channels.items():
-		for change in channel:
-			chunkobj[cname][change[0]] = change[1]
-	#outfile = gzip.open(filename, 'wb')
-	#json.dump(chunkobj, outfile)
+#for key, channels in data.items():
+#	filename = "chunks/chunk_%d_%d_%d.json.gz" % tuple(json.loads(key))
+#	chunkobj = json.load(gzip.open(filename, 'rb'))
+#	for cname, channel in channels.items():
+#		for change in channel:
+#			chunkobj[cname][change[0]] = change[1]
+#	outfile = gzip.open(filename, 'wb')
+#	json.dump(chunkobj, outfile)
 
 print "Status: 204"
 print ""

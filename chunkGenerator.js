@@ -194,6 +194,7 @@ function produceChunk() {
 }
 
 function sendChanges() {
+	/*
 	if(Object.keys(changeBatch).length != 0) {
 		var req = new XMLHttpRequest();
 		req.open("POST", "edit_chunks");
@@ -201,6 +202,7 @@ function sendChanges() {
 		req.send(pako.gzip(JSON.stringify(changeBatch)));
 		changeBatch = new Object();
 	}
+	*/
 }
 
 setInterval(produceChunk, 0);
