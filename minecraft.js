@@ -233,16 +233,6 @@ function World(gl) {
 		for(var i = 0; i < self.entities.length; i++) {
 			var ent = self.entities[i];
 			if(ent.onGround) {
-				// if this is a block entity and it is touching the ground, remove it
-				if(ent.block) {
-					self.entities.splice(i--, 1);
-					self.setBlock([
-						Math.floor(ent.pos[0]),
-						Math.floor(ent.pos[1]),
-						Math.floor(ent.pos[2])
-					], ent.block);
-					continue;
-				}
 				vec3.scale(ent.vel, frictCoeff);
 				vec3.add(ent.vel, ent.walkForce);
 			}else{
@@ -263,6 +253,18 @@ function World(gl) {
 				}
 			}
 			ent.onGround = self.moveBox(ent.box, ent.pos, ent.vel);
+			// if this is a block entity and it has touched the ground, remove it
+			if(ent.onGround) {
+				if(ent.block) {
+					self.entities.splice(i--, 1);
+					self.setBlock([
+						Math.floor(ent.pos[0]),
+						Math.floor(ent.pos[1]),
+						Math.floor(ent.pos[2])
+					], ent.block);
+					continue;
+				}
+			}
 		}
 	}
 
