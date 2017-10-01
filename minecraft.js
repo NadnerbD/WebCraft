@@ -1383,7 +1383,7 @@ function main() {
 		initObjectBuffers(gl, Mesh.Item, "item", world.createBuffers())
 	];
 
-	var blockEnt = initObjectBuffers(gl, world.generateBlockEntMesh(12, 0, 0), "chunk", world.createBuffers());
+	var blockModels = new Array();
 
 	var sky = [
 		vec3.create([0.707, -0.707, 0]), // direction
@@ -1569,9 +1569,14 @@ function main() {
 			var ep = displayPos[ei];
 			var esl = world.getData(Math.floor(ep[0]), Math.floor(ep[1]), Math.floor(ep[2]), "skyLight");
 			var ebl = world.getData(Math.floor(ep[0]), Math.floor(ep[1]), Math.floor(ep[2]), "blockLight");
-			if(world.entities[ei].block) {
+			var bid = world.entities[ei].block;
+			if(bid) {
+				if(!blockModels[bid]) {
+					blockModels[bid] = initObjectBuffers(gl, world.generateBlockEntMesh(bid, 0, 0), "chunk", world.createBuffers());
+				}
+				var blockModel = blockModels[bid];
 				model.push({
-					subModel: [blockEnt],
+					subModel: [blockModel],
 					location: vec3.create(ep),
 					rotation: [0, 0, 1, 0],
 					scale: [1, 1, 1],
