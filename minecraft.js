@@ -861,8 +861,8 @@ function World(gl) {
 		}
 	}
 	function addCross(x, y, z, block, output, bounds, biome) {
+		var data = getData(x, y, z, "data");
 		for(var face = 0; face < 4; face++) {
-			var data = getData(x, y, z, "data");
 			var id = faceId(block, face, data);
 			var norm = crossNormals[face];
 			addFace(x, y, z, block, output, bounds, face, id, norm, crossVerts, biome);
@@ -897,6 +897,30 @@ function World(gl) {
 				}
 			}
 		}
+	}
+
+	this.generateBlockEntMesh = function(block, data, biome) {
+		var output = new Object();
+		output.vertices = new Array();
+		output.normals = new Array();
+		output.uvs = new Array();
+		output.faces = new Array();
+		output.skyLight = new Array();
+		output.blockLight = new Array();
+		output.matColors = new Array();
+		output.location = [-0.5, -0.5, -0.5];
+		output.rotation = [0, 0, 1, 0];
+		output.scale = [1, 1, 1];
+		for(var face in faceNormals) {
+			var id = faceId(block, face, data);
+			var norm = faceNormals[face];
+			addFace(0, 0, 0, block, output, {min: [0, 0, 0]}, face, id, norm, faceVerts, biome);
+			for(var vi = 0; vi < 4; vi++) {
+				output.skyLight.push(1);
+				output.blockLight.push(1);
+			}
+		}
+		return output;
 	}
 
 	var biomeNoise = new SimplexNoise(1, 16);
@@ -1352,6 +1376,7 @@ function main() {
 		initObjectBuffers(gl, Mesh.Item, "item", world.createBuffers())
 	];
 
+	var blockEnt = initObjectBuffers(gl, world.generateBlockEntMesh(12, 0, 0), "chunk", world.createBuffers());
 
 	var sky = [
 		vec3.create([0.707, -0.707, 0]), // direction
@@ -1504,7 +1529,6 @@ function main() {
 	var dayRot = 0;
 	var selectedBlock = null;
 	var gameTime = new Date().getTime();
-	var lastPos = [vec3.create([0, 0, 0])];
 	var displayPos = [vec3.create([0, 0, 0])];
 
 	setInterval(function() {
@@ -1538,14 +1562,25 @@ function main() {
 			var ep = displayPos[ei];
 			var esl = world.getData(Math.floor(ep[0]), Math.floor(ep[1]), Math.floor(ep[2]), "skyLight");
 			var ebl = world.getData(Math.floor(ep[0]), Math.floor(ep[1]), Math.floor(ep[2]), "blockLight");
-			model.push({
-				subModel: playerModel,
-				location: vec3.add([0, -0.85, 0], ep),
-				rotation: [0, 0, 1, 0],
-				scale: [0.85, 0.85, 0.85],
-				skyLight: Math.pow(0.8, world.MAX_LIGHT - esl),
-				blockLight: Math.pow(0.8, world.MAX_LIGHT - ebl)
-			});
+			if(world.entities[ei].block) {
+				model.push({
+					subModel: [blockEnt],
+					location: vec3.create(ep),
+					rotation: [0, 0, 1, 0],
+					scale: [1, 1, 1],
+					skyLight: Math.pow(0.8, world.MAX_LIGHT - esl),
+					blockLight: Math.pow(0.8, world.MAX_LIGHT - ebl)
+				});
+			}else{
+				model.push({
+					subModel: playerModel,
+					location: vec3.add([0, -0.85, 0], ep),
+					rotation: [0, 0, 1, 0],
+					scale: [0.85, 0.85, 0.85],
+					skyLight: Math.pow(0.8, world.MAX_LIGHT - esl),
+					blockLight: Math.pow(0.8, world.MAX_LIGHT - ebl)
+				});
+			}
 		}
 
 		model.push(crosshairBuffer);
@@ -1584,9 +1619,8 @@ function main() {
 			// progress the simulation to the current time
 			var currentTime = new Date().getTime();
 			while(gameTime < currentTime) {
-				lastPos = [];
 				for(var ent of world.entities) {
-					lastPos.push(vec3.create(ent.pos));
+					ent.lastPos = vec3.create(ent.pos);
 				}
 				world.tick();
 				gameTime += tickLen;
@@ -1596,11 +1630,11 @@ function main() {
 				}
 			}
 			displayPos = [];
-			for(var ent in world.entities) {
+			for(var ent of world.entities) {
 				// gameTime can be greater than currentTime by up to one tick length
 				var blend = (gameTime - currentTime) / tickLen;
-				var diff = vec3.subtract(vec3.create(lastPos[ent]), world.entities[ent].pos);
-				var interp = vec3.add(vec3.create(world.entities[ent].pos), vec3.scale(diff, blend));
+				var diff = vec3.subtract(vec3.create(ent.lastPos), ent.pos);
+				var interp = vec3.add(vec3.create(ent.pos), vec3.scale(diff, blend));
 				displayPos.push(interp);
 			}
 		}
