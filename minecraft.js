@@ -731,6 +731,11 @@ function World(gl) {
 				self.entities.push(new self.BlockEntity(aPos, above));
 			}
 		}
+		// if we're placing a gravity-affected block, and there is air below it, remove it and create a block entity
+		if(canFall(block) && getData(pos[0], pos[1] - 1, pos[2], "blocks") == 0) {
+			self.setBlock(pos, 0);
+			self.entities.push(new self.BlockEntity(pos, block));
+		}
 	}
 	// four verts per face
 	var faceNormals = [
