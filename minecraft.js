@@ -216,6 +216,13 @@ function World(gl) {
 		this.vel = [0, 0, 0];
 		this.walkForce = [0, 0, 0];
 	}
+	this.BlockEntity = function (pos, type) {
+		this.box = [1, 1, 1];
+		this.pos = [pos[0] + 0.5, pos[1] + 0.5, pos[2] + 0.5];
+		this.vel = [0, 0, 0];
+		this.walkForce = [0, 0, 0];
+		this.block = type;
+	}
 
 	var frictCoeff = 0.7;
 	var flyCoeff = 0.025;
@@ -226,6 +233,16 @@ function World(gl) {
 		for(var i = 0; i < self.entities.length; i++) {
 			var ent = self.entities[i];
 			if(ent.onGround) {
+				// if this is a block entity and it is touching the ground, remove it
+				if(ent.block) {
+					self.entities.splice(i--, 1);
+					self.setBlock([
+						Math.floor(ent.pos[0]),
+						Math.floor(ent.pos[1]),
+						Math.floor(ent.pos[2])
+					], ent.block);
+					continue;
+				}
 				vec3.scale(ent.vel, frictCoeff);
 				vec3.add(ent.vel, ent.walkForce);
 			}else{
@@ -447,6 +464,9 @@ function World(gl) {
 			&& block != 11	// lava 2
 			&& block != 18	// leaves
 			&& block != 20;	// glass
+	}
+	function canFall(block) {
+		return block == 12 || block == 13; // sand || gravel
 	}
 	function drawSelfAdj(block) {
 		// this attribute is used for drawing only
@@ -700,6 +720,15 @@ function World(gl) {
 		}
 		if(emit(block) > 0)
 			addLights([[pos, emit(block)]], "blockLight");
+		// if we're removing a block under a gravity-affected block, remove that block and create a block entity
+		if(block == 0) {
+			var aPos = [pos[0], pos[1] + 1, pos[2]];
+			var above = parseInt(getData(aPos[0], aPos[1], aPos[2], "blocks"));
+			if(canFall(above)) {
+				self.setBlock(aPos, 0);
+				self.entities.push(new self.BlockEntity(aPos, above));
+			}
+		}
 	}
 	// four verts per face
 	var faceNormals = [
