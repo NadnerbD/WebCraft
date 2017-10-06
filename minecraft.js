@@ -210,7 +210,7 @@ function World(gl) {
 	}
 	this.saveInterval = function() {
 		if(self.netDirty.length) {
-			self.saveChunk(self.netDirty.pop());
+			self.saveChunk(self.netDirty.shift());
 		}
 	}
 
@@ -1553,7 +1553,7 @@ function main() {
 		// update the HUD
 		document.getElementById("selBlock").innerText = selectedBlock ? selectedBlock[0] : "";
 		document.getElementById("meshPoolSize").innerText = world.meshPoolSize();
-		document.getElementById("chunkPoolSize").innerText = world.chunkPoolSize();
+		document.getElementById("chunkPoolSize").innerText = world.chunkPoolSize() + (world.netDirty.length ? " Save Queue: " + world.netDirty.length : "");
 
 		var camPos = vec3.add([0, 0.65, 0], displayPos[0]);
 		world.meshGenTime = 0;
