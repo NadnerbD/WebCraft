@@ -199,14 +199,19 @@ function World(gl) {
 	this.getData = getData;
 	this.getChunk = getChunk;
 	this.MAX_LIGHT = MAX_LIGHT;
-	this.saveCurrentChunk = function() {
-		var p = this.entities[0].pos;
-		var chunk = this.getChunk(p[0], p[1], p[2]);
+
+	this.netDirty = [];
+	this.saveChunk = function(chunk) {
 		var req = new XMLHttpRequest();
 		req.open("POST", "save_chunk");
 		req.setRequestHeader("X-Coord", JSON.stringify(chunk.coord));
 		req.setRequestHeader("Content-Encoding", "gzip");
 		req.send(pako.gzip(JSON.stringify(chunk)));
+	}
+	this.saveInterval = function() {
+		if(self.netDirty.length) {
+			self.saveChunk(self.netDirty.pop());
+		}
 	}
 
 	this.entities = new Array();
@@ -546,6 +551,10 @@ function World(gl) {
 		if(chunk) {
 			chunk.setData(locOfs(x, CHUNK_WIDTH_X), locOfs(y, CHUNK_WIDTH_Y), locOfs(z, CHUNK_WIDTH_Z), channel, data);
 			touch(x, y, z);
+			// queue the chunk for saving
+			if(self.netDirty.indexOf(chunk) == -1) {
+				self.netDirty.push(chunk);
+			}
 		}
 	}
 	function touch(x, y, z) {
@@ -1652,6 +1661,9 @@ function main() {
 		}
 		lastTime = timeNow;
 	}, 15);
+
+	// save a chunk from the netDirty queue every 10 seconds
+	setInterval(world.saveInterval, 1000 * 10);
 
 	return canvas;
 }
