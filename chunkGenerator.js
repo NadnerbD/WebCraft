@@ -155,7 +155,7 @@ self.onmessage = function (msg) {
 		}
 		// check if the server has a copy of the chunk
 		var req = new XMLHttpRequest();
-		req.open("GET", "chunks/chunk_" + c[0] + "_" + c[1] + "_" + c[2] + ".json.gz?" + new Date().getTime());
+		req.open("GET", "chunks/chunk_" + c[0] + "_" + c[1] + "_" + c[2] + ".json.gz");
 		req.onreadystatechange = function() {
 			if(req.readyState != req.DONE) return;
 			if(req.status == 200) {
