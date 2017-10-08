@@ -1,6 +1,5 @@
 <FilesMatch "\.gz$">
-	Header append Content-Encoding "gzip"
-	Header append Cache-Control "no-cache"
-	# this doesn't work until 2.2.12 (we're on 2.2.11)
-	# Header set Content-Type "application/json"
+	Header set Content-Encoding "gzip"
+	Header set Cache-Control "no-cache"
+	Header set Content-Type "application/json"
 </FilesMatch>
