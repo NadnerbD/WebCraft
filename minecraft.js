@@ -1316,9 +1316,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	var mvMatrix = mat4.create();
 	mat4.identity(mvMatrix);
 
-	mat4.rotate(mvMatrix, degToRad(camRot[0]), [1, 0, 0]);
-	mat4.rotate(mvMatrix, degToRad(camRot[1]), [0, 1, 0]);
-	mat4.rotate(mvMatrix, degToRad(camRot[2]), [0, 0, 1]);
+	mat4.multiply(mvMatrix, camRot);
 	mat4.translate(mvMatrix, vec3.subtract(vec3.create(), camPos));
 
 	for(var tex in textures) {
@@ -1405,7 +1403,8 @@ function main() {
 	for(var i = 0; i < 15; i++) {
 		world.entities.push(new world.Entity([10, 130, 10]));
 	}
-	var camRot = [45, 45, 0];
+	var mouseRot = [45, 45, 0];
+	var camRot = eulerToMat(mouseRot);
 
 	// number of chunks from the current chunk to display
 	var DRAW_DIST = 7;
@@ -1423,13 +1422,27 @@ function main() {
 
 	function lookFunc(event) {
 		var delta = [event.movementX || event.mozMovementX || 0, event.movementY || event.mozMovementY || 0];
-		camRot[1] += delta[0] * 0.25;
-		camRot[0] += delta[1] * 0.25;
-		if(camRot[0] > 90)
-			camRot[0] = 90;
-		if(camRot[0] < -90)
-			camRot[0] = -90;
-		lastMousePos = [event.clientX, event.clientY];
+		mouseRot[1] += delta[0] * 0.25;
+		mouseRot[0] += delta[1] * 0.25;
+		if(mouseRot[0] > 90)
+			mouseRot[0] = 90;
+		if(mouseRot[0] < -90)
+			mouseRot[0] = -90;
+		camRot = eulerToMat(mouseRot);
+	}
+
+	if(window.DeviceMotionEvent != undefined) {
+		window.ondeviceorientation = function(event) {
+			if(event.alpha == null) return; // chome will fire this event even with no gyro
+			rotY = eulerToMat([event.gamma, 0, 0]);
+			rotX = eulerToMat([0, -event.beta, 0]);
+			rotZ = eulerToMat([0, 0, -(event.alpha - 180)]);
+			camRot = eulerToMat([0, 0, window.orientation - 90]);
+			mat4.multiply(camRot, rotY);
+			mat4.multiply(camRot, rotX);
+			mat4.multiply(camRot, rotZ);
+			mat4.multiply(camRot, eulerToMat([90, 0, 0]));
+		}
 	}
 
 	// prepare the pointer lock functions
@@ -1548,8 +1561,7 @@ function main() {
 	var displayPos = [vec3.create([0, 0, 0])];
 
 	setInterval(function() {
-		var dirs = eulerToMat(camRot);
-		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], displayPos[0]), [-dirs[2], -dirs[6], -dirs[10]], 20);
+		selectedBlock = world.traceRay(vec3.add([0, 0.65, 0], displayPos[0]), [-camRot[2], -camRot[6], -camRot[10]], 20);
 		// update the HUD
 		document.getElementById("selBlock").innerText = selectedBlock ? selectedBlock[0] : "";
 		document.getElementById("meshPoolSize").innerText = world.meshPoolSize();
@@ -1628,10 +1640,10 @@ function main() {
 			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]);
 		
 			// set the player walk force
-			var dirs = eulerToMat([0, camRot[1], 0]);
+			// walk in the -z or -x direction vector of the camera, flattened along the y axis
 			var vel = vec3.add(
-				vec3.scale([-dirs[2], -dirs[6], -dirs[10]], moveDir[2]), 
-				vec3.scale([-dirs[0], -dirs[4], -dirs[8]], moveDir[0])
+				vec3.scale(vec3.normalize([-camRot[2], 0, -camRot[10]]), moveDir[2]),
+				vec3.scale(vec3.normalize([-camRot[0], 0, -camRot[8]]), moveDir[0])
 			);
 			vec3.scale(vec3.normalize(vel), world.walkStrength);
 			vec3.add(vel, [0, moveDir[1] * world.jumpStrength, 0]);
