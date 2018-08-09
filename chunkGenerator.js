@@ -154,6 +154,8 @@ self.onmessage = function (msg) {
 			if(i[0] == c[0] && i[1] == c[1] && i[2] == c[2]) return;
 		}
 		// check if the server has a copy of the chunk
+		chunkQueue.push(c);
+		/*
 		var req = new XMLHttpRequest();
 		req.open("GET", "chunks/chunk_" + c[0] + "_" + c[1] + "_" + c[2] + ".json.gz");
 		req.onreadystatechange = function() {
@@ -167,6 +169,7 @@ self.onmessage = function (msg) {
 			}
 		}
 		req.send();
+		*/
 	}else if(a == "cancel") {
 		// remove the coord from the queue
 		for(var i of chunkQueue) {
@@ -185,11 +188,13 @@ function produceChunk() {
 		var chunk = new Chunk(coord);
 		postMessage(chunk);
 		// if we generated the chunk, send it to the server
+		/*
 		var req = new XMLHttpRequest();
 		req.open("POST", "save_chunk");
 		req.setRequestHeader("X-Coord", JSON.stringify(chunk.coord));
 		req.setRequestHeader("Content-Encoding", "gzip");
 		req.send(pako.gzip(JSON.stringify(chunk)));
+		*/
 	}
 }
 

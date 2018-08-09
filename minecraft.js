@@ -202,11 +202,13 @@ function World(gl) {
 
 	this.netDirty = [];
 	this.saveChunk = function(chunk) {
+		return; /*
 		var req = new XMLHttpRequest();
 		req.open("POST", "save_chunk");
 		req.setRequestHeader("X-Coord", JSON.stringify(chunk.coord));
 		req.setRequestHeader("Content-Encoding", "gzip");
 		req.send(pako.gzip(JSON.stringify(chunk)));
+		*/
 	}
 	this.saveInterval = function() {
 		if(self.netDirty.length) {
