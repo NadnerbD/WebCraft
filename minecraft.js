@@ -1654,9 +1654,9 @@ function main() {
 				vec3.scale(vec3.normalize([-camRot[2], 0, -camRot[10]]), moveDir[2]),
 				vec3.scale(vec3.normalize([-camRot[0], 0, -camRot[8]]), moveDir[0])
 			);
-			vec3.scale(vec3.normalize(vel), world.walkStrength);
+			vec3.scale(vec3.normalize(vel), sneak ? world.walkStrength * 0.25 : world.walkStrength);
 			vec3.add(vel, [0, moveDir[1] * world.jumpStrength, 0]);
-			world.entities[0].walkForce = sneak ? vec3.scale(vel, 0.25): vel;
+			world.entities[0].walkForce = vel;
 			world.entities[0].sneak = sneak;
 			
 			// progress the simulation to the current time
