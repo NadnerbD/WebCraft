@@ -220,6 +220,7 @@ function World(gl) {
 		this.pos = vec3.create(pos);
 		this.vel = [0, 0, 0];
 		this.walkForce = [0, 0, 0];
+		this.sneak = false;
 	}
 	this.BlockEntity = function (pos, type) {
 		this.box = [1, 1, 1];
@@ -257,7 +258,7 @@ function World(gl) {
 					if(len < 1) vec3.add(ent.vel, vec3.scale(vec3.normalize(diff), 0.05));
 				}
 			}
-			ent.onGround = self.moveBox(ent.box, ent.pos, ent.vel);
+			ent.onGround = self.moveBox(ent.box, ent.pos, ent.vel, ent.sneak);
 			// if this is a block entity and it has touched the ground, remove it
 			if(ent.onGround) {
 				if(ent.block) {
@@ -1040,7 +1041,7 @@ function World(gl) {
 		}
 		return false;
 	}
-	this.moveBox = function(box, pos, vel) {
+	this.moveBox = function(box, pos, vel, sneak) {
 		// alternative to sweepBox, using code based on Prelude to the Chambered
 		// probably similar to minecraft's actual collision system
 		// (also explains the lack of all angled faces in minecraft)
@@ -1053,12 +1054,13 @@ function World(gl) {
 		// sloped surfaces, which presumably is why minecraft doesn't have any
 		var hitGround = false;
 		var order = colliding([vel[0] + pos[0], pos[1], pos[2]], box) ? [2, 0, 1] : [0, 2, 1];
+		var preventFall = sneak && vel[1] < 0 && colliding([pos[0], pos[1] + vel[1], pos[2]], box);
 		for(var axis of order) {
 			var start = pos[axis];
 			var end = start + vel[axis];
 			var checkPt = vec3.create(pos);
 			checkPt[axis] = end;
-			var col = colliding(checkPt, box);
+			var col = colliding(checkPt, box) || (preventFall && axis != 1 && !colliding([checkPt[0], checkPt[1] + vel[1], checkPt[2]], box));
 			if(col) {
 				// note: ommitting the second condition here allows you to stick to ceilings by holding space
 				// highly awesome, consider using in future :D
@@ -1070,7 +1072,7 @@ function World(gl) {
 				do {
 					var mid = (start + end) / 2;
 					checkPt[axis] = mid;
-					col = colliding(checkPt, box);
+					col = colliding(checkPt, box) || (preventFall && axis != 1 && !colliding([checkPt[0], checkPt[1] + vel[1], checkPt[2]], box));
 					if(col) {
 						end = mid;
 					}else{
@@ -1512,6 +1514,7 @@ function main() {
 	}, false);
 
 	var moveDir = [0, 0, 0];
+	var sneak   = false;
 	document.addEventListener('keydown', function(event) {
 		switch(event.keyCode) {
 		case 87: // 87 w
@@ -1528,6 +1531,9 @@ function main() {
 			break;
 		case 32: // space
 			moveDir[1] = 1;
+			break;
+		case 16: // shift
+			sneak = true;
 			break;
 		default:
 			//alert(event.keyCode);
@@ -1547,6 +1553,9 @@ function main() {
 			break;
 		case 32: // space
 			moveDir[1] = 0;
+			break;
+		case 16: // shift
+			sneak = false;
 			break;
 		}
 	}, false);
@@ -1647,7 +1656,8 @@ function main() {
 			);
 			vec3.scale(vec3.normalize(vel), world.walkStrength);
 			vec3.add(vel, [0, moveDir[1] * world.jumpStrength, 0]);
-			world.entities[0].walkForce = vel;
+			world.entities[0].walkForce = sneak ? vec3.scale(vel, 0.25): vel;
+			world.entities[0].sneak = sneak;
 			
 			// progress the simulation to the current time
 			var currentTime = new Date().getTime();
