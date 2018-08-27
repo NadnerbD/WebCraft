@@ -34,6 +34,7 @@ varying vec3 vVertexColor; \n\
 varying vec4 vPosition; \n\
 uniform sampler2D uSampler; \n\
 uniform bool uEnableAlpha; \n\
+uniform vec3 uFogColor; \n\
 void main(void) { \n\
 	gl_FragColor = texture2D(uSampler, vTextureCoord) * vec4(vVertexColor, 1.0); \n\
 	if(gl_FragColor.a < 0.9 || (uEnableAlpha && gl_FragColor == texture2D(uSampler, vec2(0.0, 0.0)))) \n\
@@ -41,7 +42,7 @@ void main(void) { \n\
 	float dist = length(vec3(vPosition)); \n\
 	float dens = clamp(1.0 / exp(dist * 0.005), 0.0, 1.0); \n\
 	// The fog color is hardcoded here, but matches the clearColor we're using at time of writing \n\
-	gl_FragColor = vec4(mix(vec3(0.0, 0.5, 1.0), vec3(gl_FragColor), dens), gl_FragColor.a); \n\
+	gl_FragColor = vec4(mix(uFogColor, vec3(gl_FragColor), dens), gl_FragColor.a); \n\
 } \n\
 ";
 
@@ -110,6 +111,7 @@ function initShaders(gl) {
 	shaderProgram.skyAmbUniform = gl.getUniformLocation(shaderProgram, "uSkyLightAmbientColor");
 	shaderProgram.skyLightUniform = gl.getUniformLocation(shaderProgram, "uSkyLight");
 	shaderProgram.blockLightUniform = gl.getUniformLocation(shaderProgram, "uBlockLight");
+	shaderProgram.fogColorUniform = gl.getUniformLocation(shaderProgram, "uFogColor");
 
 	return shaderProgram;
 }
@@ -1307,7 +1309,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	}
 
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-	gl.clearColor(0.0, 0.5, 1.0, 1.0);
+	gl.clearColor(sky[3][0], sky[3][1], sky[3][2], 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var pMatrix = mat4.create();
@@ -1330,6 +1332,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	gl.uniform3fv(shaderProgram.skyDirUniform, vec3.create(mat4.multiplyVec4(mvMatrix, [sky[0][0], sky[0][1], sky[0][2], 0])));
 	gl.uniform3fv(shaderProgram.skyDifUniform, sky[1]);
 	gl.uniform3fv(shaderProgram.skyAmbUniform, sky[2]);
+	gl.uniform3fv(shaderProgram.fogColorUniform, sky[3]);
 
 	drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack);
 }
@@ -1395,9 +1398,10 @@ function main() {
 	var blockModels = new Array();
 
 	var sky = [
-		vec3.create([0.707, -0.707, 0]), // direction
-		vec3.create([1, 0.5, 0]), // diffuse
-		vec3.create([1, 1, 1]) //vec3.create([0.2, 0.2, 0.5]) // ambient
+		vec3.create([0.707, -0.707, 0]), // sky light directional light direction
+		vec3.create([1, 0.5, 0]), // sky directional light color
+		vec3.create([1, 1, 1]), // sky ambient light color
+		vec3.create([0, 0.5, 1]) // sky fog and clearcolor
 	];
 
 	//var camPos = [-20, 50, 30];
@@ -1646,7 +1650,10 @@ function main() {
 			document.getElementById("fpsCount").innerText = Math.floor(1000 / average) + " min: " + Math.floor(1000 / max);
 
 			dayRot += elapsed / 5000 * Math.PI;
-			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]);
+			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]); // skylight direction
+			sky[1] = vec3.scale([1, 0.5, 0], Math.cos(dayRot) > 0 ? 1 : 0); // skylight directional color
+			sky[2] = vec3.scale([1, 1, 1], Math.max(0, Math.cos(dayRot))); // skylight ambient color
+			sky[3] = vec3.scale([0, 0.5, 1], Math.max(0, Math.cos(dayRot))); // sky and fog color
 		
 			// set the player walk force
 			// walk in the -z or -x direction vector of the camera, flattened along the y axis
