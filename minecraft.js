@@ -629,6 +629,7 @@ function World(gl) {
 			}
 		}
 		// breadth first search fill to minimize wasted writes
+		var touchedCells = {};
 		while(cellStack.length > 0) {
 			var cur = cellStack.shift();
 			pos = cur[0];
@@ -638,6 +639,9 @@ function World(gl) {
 				var adjOpac = opacity(getData(adjPos[0], adjPos[1], adjPos[2], "blocks"));
 				var adjValue = getData(adjPos[0], adjPos[1], adjPos[2], channel);
 				var nextValue = value - adjOpac - 1;
+				// if we set values outside the writable area, they won't remember the value and we could loop forever
+				if(touchedCells[adjPos.toString()] >= nextValue) continue;
+				touchedCells[adjPos.toString()] = nextValue;
 				if(adjOpac == 0 && i == 5 && value == MAX_LIGHT && channel == "skyLight" && value > adjValue) {
 					nextValue = value;
 					cellStack.unshift([adjPos, nextValue]); // descending skyLight goes to the front of the queue
