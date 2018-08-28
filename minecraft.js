@@ -1346,9 +1346,15 @@ function main() {
 		return null;
 	var shaderProgram = initShaders(gl);
 	var skinTexture = initTexture(gl, "Nadnerb.png");
-	var terrainTexture = initTexture(gl, "terrain.png");
+	var terrainDefault = initTexture(gl, "terrain_default.png");
+	var terrainPainterly = initTexture(gl, "terrain_painterly.png");
+	var terrainTexture = terrainDefault;
 	var itemTexture = initTexture(gl, "items.png");
 	var crossTexture = initTexture(gl, "crosshair.png");
+
+	document.getElementById("texture").addEventListener("change", function(event) {
+		terrainTexture = event.target.value == "Default" ? terrainDefault : terrainPainterly;
+	}, false);
 
 	var world = new World(gl);
 	window.world = world;
@@ -1649,7 +1655,7 @@ function main() {
 			// update the framerate counter
 			document.getElementById("fpsCount").innerText = Math.floor(1000 / average) + " min: " + Math.floor(1000 / max);
 
-			dayRot += elapsed / 5000 * Math.PI;
+			dayRot += elapsed / 50000 * Math.PI;
 			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]); // skylight direction
 			sky[1] = vec3.scale([1, 0.5, 0], Math.cos(dayRot) > 0 ? 1 : 0); // skylight directional color
 			sky[2] = vec3.scale([1, 1, 1], Math.max(0, Math.cos(dayRot))); // skylight ambient color
