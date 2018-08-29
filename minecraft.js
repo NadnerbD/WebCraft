@@ -1660,15 +1660,15 @@ function main() {
 			document.getElementById("fpsCount").innerText = Math.floor(1000 / average) + " min: " + Math.floor(1000 / max);
 
 			dayRot += elapsed / 50000 * Math.PI;
-			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]); // skylight direction
-			sky[1] = vec3.scale([1, 0.5, 0], Math.cos(dayRot) > 0 ? 1 : 0); // skylight directional color
+			sky[0] = vec3.scale([Math.sin(dayRot), Math.cos(dayRot), 0], Math.cos(dayRot) > 0 ? 1 : -1); // skylight direction
+			sky[1] = Math.cos(dayRot) > 0 ? [1, 0.5, 0] : [0.2, 0.2, 0.2]; // skylight directional color
 			sky[2] = vec3.add(
 				vec3.scale([1, 1, 1], Math.max(0, Math.cos(dayRot))), // skylight ambient color
-				vec3.scale([0, 0, 0.2], 1 - Math.max(0, Math.cos(dayRot)))
+				vec3.scale([0.1, 0.1, 0.3], 1 - Math.max(0, Math.cos(dayRot)))
 			);
 			sky[3] = vec3.add(
-				vec3.scale([0.4, 0.9, 1], Math.max(0, Math.cos(dayRot))), // sky and fog color
-				vec3.scale([0, 0, 0.2], 1 - Math.max(0, Math.cos(dayRot)))
+				vec3.scale([0.6, 0.8, 1], Math.max(0, Math.cos(dayRot))), // sky and fog color
+				vec3.scale([0.1, 0.1, 0.2], 1 - Math.max(0, Math.cos(dayRot)))
 			);
 		
 			// set the player walk force
