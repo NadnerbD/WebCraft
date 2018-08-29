@@ -21,7 +21,7 @@ void main(void) { \n\
 	vTextureCoord = aTextureCoord; \n\
 	vec3 skyLightDirectionalColor = max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor * aSkyLight * uSkyLight; \n\
 	vec3 skyLightAmbientColor = uSkyLightAmbientColor * aSkyLight * uSkyLight; \n\
-	vec3 blockLightColor =  vec3(1, 1, 1) * aBlockLight * uBlockLight; \n\
+	vec3 blockLightColor =  vec3(1.5, 1.2, 1) * aBlockLight * uBlockLight; \n\
 	vVertexColor = aVertexColor * (min(skyLightAmbientColor + blockLightColor, vec3(1, 1, 1)) + skyLightDirectionalColor); \n\
 } \n\
 ";
