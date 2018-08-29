@@ -19,9 +19,10 @@ void main(void) { \n\
 	vPosition = uMVMatrix * vec4(aVertexPosition, 1.0); \n\
 	gl_Position = uPMatrix * vPosition; \n\
 	vTextureCoord = aTextureCoord; \n\
-	vec3 skyLightColor = (uSkyLightAmbientColor + max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor) * aSkyLight * uSkyLight; \n\
+	vec3 skyLightDirectionalColor = max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor * aSkyLight * uSkyLight; \n\
+	vec3 skyLightAmbientColor = uSkyLightAmbientColor * aSkyLight * uSkyLight; \n\
 	vec3 blockLightColor =  vec3(1, 1, 1) * aBlockLight * uBlockLight; \n\
-	vVertexColor = aVertexColor * max(skyLightColor, blockLightColor); \n\
+	vVertexColor = aVertexColor * (min(skyLightAmbientColor + blockLightColor, vec3(1, 1, 1)) + skyLightDirectionalColor); \n\
 } \n\
 ";
 
@@ -41,7 +42,6 @@ void main(void) { \n\
 		discard; \n\
 	float dist = length(vec3(vPosition)); \n\
 	float dens = clamp(1.0 / exp(dist * 0.005), 0.0, 1.0); \n\
-	// The fog color is hardcoded here, but matches the clearColor we're using at time of writing \n\
 	gl_FragColor = vec4(mix(uFogColor, vec3(gl_FragColor), dens), gl_FragColor.a); \n\
 } \n\
 ";
@@ -1662,8 +1662,14 @@ function main() {
 			dayRot += elapsed / 50000 * Math.PI;
 			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]); // skylight direction
 			sky[1] = vec3.scale([1, 0.5, 0], Math.cos(dayRot) > 0 ? 1 : 0); // skylight directional color
-			sky[2] = vec3.scale([1, 1, 1], Math.max(0, Math.cos(dayRot))); // skylight ambient color
-			sky[3] = vec3.scale([0, 0.5, 1], Math.max(0, Math.cos(dayRot))); // sky and fog color
+			sky[2] = vec3.add(
+				vec3.scale([1, 1, 1], Math.max(0, Math.cos(dayRot))), // skylight ambient color
+				vec3.scale([0, 0, 0.2], 1 - Math.max(0, Math.cos(dayRot)))
+			);
+			sky[3] = vec3.add(
+				vec3.scale([0.4, 0.9, 1], Math.max(0, Math.cos(dayRot))), // sky and fog color
+				vec3.scale([0, 0, 0.2], 1 - Math.max(0, Math.cos(dayRot)))
+			);
 		
 			// set the player walk force
 			// walk in the -z or -x direction vector of the camera, flattened along the y axis
