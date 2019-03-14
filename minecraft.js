@@ -1641,7 +1641,7 @@ function main() {
 			var bid = world.entities[ei].block;
 			if(bid) {
 				if(!blockModels[bid]) {
-					blockModels[bid] = initObjectBuffers(gl, world.generateBlockEntMesh(bid, 0, 0), "chunk", world.createBuffers());
+					blockModels[bid] = initObjectBuffers(gl, world.generateBlockEntMesh(bid, 0, 0), "chunk", world.createBuffers(2));
 				}
 				var blockModel = blockModels[bid];
 				model.push({
