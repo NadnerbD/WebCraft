@@ -1379,7 +1379,7 @@ function main() {
 	var skinTexture = initTexture(gl, "Nadnerb.png");
 	var terrainDefault = initTexture(gl, "terrain_default.png");
 	var terrainPainterly = initTexture(gl, "terrain_painterly.png");
-	var terrainTexture = terrainDefault;
+	var terrainTexture = terrainPainterly;
 	var itemTexture = initTexture(gl, "items.png");
 	var crossTexture = initTexture(gl, "crosshair.png");
 
