@@ -14,6 +14,9 @@
 				document.getElementById("drawDist").addEventListener("click", function(event) {
 					event.stopPropagation();
 				}, false);
+				document.getElementById("texture").addEventListener("click", function(event) {
+					event.stopPropagation();
+				}, false);
 			}
 		</script>
 		<style>
@@ -44,6 +47,7 @@
 		<option value="4">Cobble</option>
 		<option value="5">Wood</option>
 		<option value="6">Tree</option>
+		<option value="8">Water</option>
 		<option value="12">Sand</option>
 		<option value="13">Gravel</option>
 		<option value="14">Gold ore</option>
@@ -59,6 +63,10 @@
 		<option value="89">Lightstone</option>
 	</select>
 	<select id="drawDist">
+	</select>
+	<select id="texture">
+		<option>Default</option>
+		<option>Painterly</option>
 	</select>
 	<br/>
 	Selected Block: <span id="selBlock"></span>

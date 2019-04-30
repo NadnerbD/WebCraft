@@ -19,9 +19,10 @@ void main(void) { \n\
 	vPosition = uMVMatrix * vec4(aVertexPosition, 1.0); \n\
 	gl_Position = uPMatrix * vPosition; \n\
 	vTextureCoord = aTextureCoord; \n\
-	vec3 skyLightColor = (uSkyLightAmbientColor + max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor) * aSkyLight * uSkyLight; \n\
-	vec3 blockLightColor =  vec3(1, 1, 1) * aBlockLight * uBlockLight; \n\
-	vVertexColor = aVertexColor * max(skyLightColor, blockLightColor); \n\
+	vec3 skyLightDirectionalColor = max(dot(vec3(uMVMatrix * vec4(aNormal, 0.0)), uSkyLightDir), 0.0) * uSkyLightDiffuseColor * aSkyLight * uSkyLight; \n\
+	vec3 skyLightAmbientColor = uSkyLightAmbientColor * aSkyLight * uSkyLight; \n\
+	vec3 blockLightColor =  vec3(1.5, 1.2, 1) * aBlockLight * uBlockLight; \n\
+	vVertexColor = aVertexColor * (min(skyLightAmbientColor + blockLightColor, vec3(1, 1, 1)) + skyLightDirectionalColor); \n\
 } \n\
 ";
 
@@ -33,21 +34,21 @@ varying vec2 vTextureCoord; \n\
 varying vec3 vVertexColor; \n\
 varying vec4 vPosition; \n\
 uniform sampler2D uSampler; \n\
-uniform bool uEnableAlpha; \n\
+uniform bool uDiscardAlpha; \n\
+uniform vec3 uFogColor; \n\
 void main(void) { \n\
 	gl_FragColor = texture2D(uSampler, vTextureCoord) * vec4(vVertexColor, 1.0); \n\
-	if(gl_FragColor.a < 0.9 || (uEnableAlpha && gl_FragColor == texture2D(uSampler, vec2(0.0, 0.0)))) \n\
+	if(uDiscardAlpha && gl_FragColor.a < 1.0) \n\
 		discard; \n\
 	float dist = length(vec3(vPosition)); \n\
 	float dens = clamp(1.0 / exp(dist * 0.005), 0.0, 1.0); \n\
-	// The fog color is hardcoded here, but matches the clearColor we're using at time of writing \n\
-	gl_FragColor = vec4(mix(vec3(0.0, 0.5, 1.0), vec3(gl_FragColor), dens), gl_FragColor.a); \n\
+	gl_FragColor = vec4(mix(uFogColor, vec3(gl_FragColor), dens), gl_FragColor.a); \n\
 } \n\
 ";
 
 function initGL(canvas) {
 	try {
-		var gl = canvas.getContext("experimental-webgl", {antialias: false});
+		var gl = canvas.getContext("experimental-webgl", {antialias: false, alpha: false});
 	} catch (e) {
 		return null;
 	}
@@ -104,12 +105,13 @@ function initShaders(gl) {
 	shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
 	shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
 	shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
-	shaderProgram.alphaUniform = gl.getUniformLocation(shaderProgram, "uEnableAlpha");
+	shaderProgram.discardAlphaUniform = gl.getUniformLocation(shaderProgram, "uDiscardAlpha");
 	shaderProgram.skyDirUniform = gl.getUniformLocation(shaderProgram, "uSkyLightDir");
 	shaderProgram.skyDifUniform = gl.getUniformLocation(shaderProgram, "uSkyLightDiffuseColor");
 	shaderProgram.skyAmbUniform = gl.getUniformLocation(shaderProgram, "uSkyLightAmbientColor");
 	shaderProgram.skyLightUniform = gl.getUniformLocation(shaderProgram, "uSkyLight");
 	shaderProgram.blockLightUniform = gl.getUniformLocation(shaderProgram, "uBlockLight");
+	shaderProgram.fogColorUniform = gl.getUniformLocation(shaderProgram, "uFogColor");
 
 	return shaderProgram;
 }
@@ -168,7 +170,16 @@ function World(gl) {
 	var chunkWindow = new Array();
 	var chunkPool = new ResPool(Object);
 
-	this.createBuffers = function() {
+	this.createChunkBuffers = function() {
+		return self.createBuffers(2);
+	}
+
+	this.createBuffers = function(passes) {
+		if(passes == undefined) passes = 1;
+		var indexBuffers = [];
+		for(var pass = 0; pass < passes; pass++) {
+			indexBuffers.push(gl.createBuffer());
+		}
 		return {
 			posBuffer: gl.createBuffer(),
 			normalBuffer: gl.createBuffer(),
@@ -176,10 +187,10 @@ function World(gl) {
 			colorBuffer: gl.createBuffer(),
 			skyBuffer: gl.createBuffer(),
 			blockBuffer: gl.createBuffer(),
-			indexBuffer: gl.createBuffer()
+			indexBuffers: indexBuffers
 		};
 	}
-	var meshPool = new ResPool(this.createBuffers);
+	var meshPool = new ResPool(this.createChunkBuffers);
 
 	var CHUNK_WIDTH_X = 16;
 	var CHUNK_WIDTH_Y = 128;
@@ -222,6 +233,7 @@ function World(gl) {
 		this.pos = vec3.create(pos);
 		this.vel = [0, 0, 0];
 		this.walkForce = [0, 0, 0];
+		this.sneak = false;
 	}
 	this.BlockEntity = function (pos, type) {
 		this.box = [1, 1, 1];
@@ -259,7 +271,7 @@ function World(gl) {
 					if(len < 1) vec3.add(ent.vel, vec3.scale(vec3.normalize(diff), 0.05));
 				}
 			}
-			ent.onGround = self.moveBox(ent.box, ent.pos, ent.vel);
+			ent.onGround = self.moveBox(ent.box, ent.pos, ent.vel, ent.sneak);
 			// if this is a block entity and it has touched the ground, remove it
 			if(ent.onGround) {
 				if(ent.block) {
@@ -446,15 +458,24 @@ function World(gl) {
 
 	// the following set of functions are my terrible hax to get
 	// block attributes
+	function pass(block) {
+		// which render pass will the block be in
+		if(block == 8) {
+			return 1;
+		}else{
+			return 0;
+		}
+	}
 	function opacity(block) {
 		// this attribute is used by the light propagation functions
-		if(block == 18) return 3;
+		if(
+			block == 18 ||	// leaves
+			block == 8	// water
+		) return 3;
 		return (block > 0 
 			&& block != 6	// trees
 			&& block != 20	// glass
 		) * MAX_LIGHT;
-		// water
-		// leaves
 	}
 	function emit(block) {
 		// this attribute is used by the light propagation functions
@@ -480,11 +501,11 @@ function World(gl) {
 	function drawSelfAdj(block) {
 		// this attribute is used for drawing only
 		// special case for leaves
-		return block == 0       // grass sides are 0, and must be drawn bordering air
-			|| block == 18; // leaves
+		return block == 0 ||	// grass sides are 0, and must be drawn bordering air
+			block == 18;	// leaves
 	}
 	function physical(block) {
-		return block > 0 && block != 6;
+		return block > 0 && block != 6; // air and trees
 	}
 	function getChunk(x, y, z) {
 		var cx = Math.floor(x / CHUNK_WIDTH_X);
@@ -628,6 +649,7 @@ function World(gl) {
 			}
 		}
 		// breadth first search fill to minimize wasted writes
+		var touchedCells = {};
 		while(cellStack.length > 0) {
 			var cur = cellStack.shift();
 			pos = cur[0];
@@ -637,6 +659,9 @@ function World(gl) {
 				var adjOpac = opacity(getData(adjPos[0], adjPos[1], adjPos[2], "blocks"));
 				var adjValue = getData(adjPos[0], adjPos[1], adjPos[2], channel);
 				var nextValue = value - adjOpac - 1;
+				// if we set values outside the writable area, they won't remember the value and we could loop forever
+				if(touchedCells[adjPos.toString()] >= nextValue) continue;
+				touchedCells[adjPos.toString()] = nextValue;
 				if(adjOpac == 0 && i == 5 && value == MAX_LIGHT && channel == "skyLight" && value > adjValue) {
 					nextValue = value;
 					cellStack.unshift([adjPos, nextValue]); // descending skyLight goes to the front of the queue
@@ -783,7 +808,7 @@ function World(gl) {
 	var faceVertIndices = [0, 1, 2, 0, 2, 3];
 	function getVertLight(x, y, z, face, vert, channel) {
 		// get the average of the light values from the four blocks in front of this vert
-		// (in front of meaning in the direction of it's normal)
+		// (in front of meaning in the direction of its normal)
 		var norm = faceNormals[face];
 		var verts = faceVerts[face];
 		var values = new Array();
@@ -825,7 +850,7 @@ function World(gl) {
 	function addFace(x, y, z, block, output, bounds, face, id, norm, vertSource, biome) {
 		// inserts all face elements except for vertex lighting
 		for(var index in faceVertIndices)
-			output.faces.push(faceVertIndices[index] + output.vertices.length / 3);
+			output.faces[pass(block)].push(faceVertIndices[index] + output.vertices.length / 3);
 		for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 			// add vertices, shifted to current position
 			var vert = vertSource[face][vertIndex];
@@ -917,18 +942,22 @@ function World(gl) {
 		}
 	}
 
+	function Mesh(loc, rot, scale) {
+		// this will produce an empty object buffer that can be sent to initObjectBuffers
+		this.vertices = new Array();
+		this.normals = new Array();
+		this.uvs = new Array();
+		this.faces = [new Array(), new Array()];
+		this.skyLight = new Array();
+		this.blockLight = new Array();
+		this.matColors = new Array();
+		this.location = loc ? loc : [0, 0, 0];
+		this.rotation = rot ? rot : [0, 0, 1, 0];
+		this.scale = scale ? scale : [1, 1, 1];
+	}
+
 	this.generateBlockEntMesh = function(block, data, biome) {
-		var output = new Object();
-		output.vertices = new Array();
-		output.normals = new Array();
-		output.uvs = new Array();
-		output.faces = new Array();
-		output.skyLight = new Array();
-		output.blockLight = new Array();
-		output.matColors = new Array();
-		output.location = [-0.5, -0.5, -0.5];
-		output.rotation = [0, 0, 1, 0];
-		output.scale = [1, 1, 1];
+		var output = new Mesh([-0.5, -0.5, -0.5]);
 		for(var face in faceNormals) {
 			var id = faceId(block, face, data);
 			var norm = faceNormals[face];
@@ -950,18 +979,7 @@ function World(gl) {
 			return undefined;
 		this.meshesGenerated++;
 		startTime = new Date().getTime();
-		// this will produce an "object" that can be sent to initObjectBuffers
-		var output = new Object();
-		output.vertices = new Array();
-		output.normals = new Array();
-		output.uvs = new Array();
-		output.faces = new Array();
-		output.skyLight = new Array();
-		output.blockLight = new Array();
-		output.matColors = new Array();
-		output.location = bounds.min;
-		output.rotation = [0, 0, 1, 0];
-		output.scale = [1, 1, 1];
+		var output = new Mesh(bounds.min);
 		for(var z = bounds.min[2]; z < bounds.max[2]; z++) {
 			for(var x = bounds.min[0]; x < bounds.max[0]; x++) {
 				var biome = biomeNoise.sample(x, 0, z);
@@ -1042,7 +1060,7 @@ function World(gl) {
 		}
 		return false;
 	}
-	this.moveBox = function(box, pos, vel) {
+	this.moveBox = function(box, pos, vel, sneak) {
 		// alternative to sweepBox, using code based on Prelude to the Chambered
 		// probably similar to minecraft's actual collision system
 		// (also explains the lack of all angled faces in minecraft)
@@ -1055,12 +1073,13 @@ function World(gl) {
 		// sloped surfaces, which presumably is why minecraft doesn't have any
 		var hitGround = false;
 		var order = colliding([vel[0] + pos[0], pos[1], pos[2]], box) ? [2, 0, 1] : [0, 2, 1];
+		var preventFall = sneak && vel[1] < 0 && colliding([pos[0], pos[1] + vel[1], pos[2]], box);
 		for(var axis of order) {
 			var start = pos[axis];
 			var end = start + vel[axis];
 			var checkPt = vec3.create(pos);
 			checkPt[axis] = end;
-			var col = colliding(checkPt, box);
+			var col = colliding(checkPt, box) || (preventFall && axis != 1 && !colliding([checkPt[0], checkPt[1] + vel[1], checkPt[2]], box));
 			if(col) {
 				// note: ommitting the second condition here allows you to stick to ceilings by holding space
 				// highly awesome, consider using in future :D
@@ -1072,7 +1091,7 @@ function World(gl) {
 				do {
 					var mid = (start + end) / 2;
 					checkPt[axis] = mid;
-					col = colliding(checkPt, box);
+					col = colliding(checkPt, box) || (preventFall && axis != 1 && !colliding([checkPt[0], checkPt[1] + vel[1], checkPt[2]], box));
 					if(col) {
 						end = mid;
 					}else{
@@ -1190,10 +1209,12 @@ function initObjectBuffers(gl, obj, name, out) {
 	out.blockBuffer.itemSize = 1;
 	out.blockBuffer.numItems = obj.blockLight.length;
 
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, out.indexBuffer);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(obj.faces), gl.STATIC_DRAW);
-	out.indexBuffer.itemSize = 1;
-	out.indexBuffer.numItems = obj.faces.length;
+	for(var pass = 0; pass < obj.faces.length; pass++) {
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, out.indexBuffers[pass]);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(obj.faces[pass]), gl.STATIC_DRAW);
+		out.indexBuffers[pass].itemSize = 1;
+		out.indexBuffers[pass].numItems = obj.faces[pass].length;
+	}
 
 	return out;
 } 
@@ -1224,8 +1245,13 @@ function eulerToMat(euler) {
 	return mat;
 }
 
-function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack, sl, bl) {
+function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack, pass, sl, bl) {
+	// we don't want modifications to mvMatrix travelling back up the call stack
+	mvMatrix = mat4.create(mvMatrix);
 	for(var i in model) {
+		// skip if we're on a leaf and there is no data for this pass
+		if(!model[i].subModel && pass >= model[i].indexBuffers.length) continue;
+
 		if(model[i].name == "chunk") {
 			gl.enable(gl.CULL_FACE);
 			gl.uniform1i(shaderProgram.samplerUniform, 0);
@@ -1258,7 +1284,7 @@ function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack, sl, bl) {
 		mat4.scale(mvMatrix, model[i].scale);
 
 		if(model[i].subModel) {
-			drawModel(gl, shaderProgram, model[i].subModel, mvMatrix, mvMatrixStack, model[i].skyLight, model[i].blockLight);
+			drawModel(gl, shaderProgram, model[i].subModel, mvMatrix, mvMatrixStack, pass, model[i].skyLight, model[i].blockLight);
 		}else{
 			gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
 
@@ -1283,12 +1309,12 @@ function drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack, sl, bl) {
 			gl.bindBuffer(gl.ARRAY_BUFFER, model[i].blockBuffer);
 			gl.vertexAttribPointer(shaderProgram.vertexBlockLightAttribute, model[i].blockBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, model[i].indexBuffer);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, model[i].indexBuffers[pass]);
 
 			if(model[i].name == "selector") {
-				gl.drawElements(gl.LINES, model[i].indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+				gl.drawElements(gl.LINES, model[i].indexBuffers[pass].numItems, gl.UNSIGNED_SHORT, 0);
 			}else{
-				gl.drawElements(gl.TRIANGLES, model[i].indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+				gl.drawElements(gl.TRIANGLES, model[i].indexBuffers[pass].numItems, gl.UNSIGNED_SHORT, 0);
 			}
 		}
 
@@ -1307,7 +1333,7 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 	}
 
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-	gl.clearColor(0.0, 0.5, 1.0, 1.0);
+	gl.clearColor(sky[3][0], sky[3][1], sky[3][2], 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var pMatrix = mat4.create();
@@ -1326,12 +1352,16 @@ function drawScene(gl, shaderProgram, textures, model, camPos, camRot, sky) {
 		gl.bindTexture(gl.TEXTURE_2D, textures[tex]);
 	}
 
-	gl.uniform1i(shaderProgram.alphaUniform, false);
 	gl.uniform3fv(shaderProgram.skyDirUniform, vec3.create(mat4.multiplyVec4(mvMatrix, [sky[0][0], sky[0][1], sky[0][2], 0])));
 	gl.uniform3fv(shaderProgram.skyDifUniform, sky[1]);
 	gl.uniform3fv(shaderProgram.skyAmbUniform, sky[2]);
+	gl.uniform3fv(shaderProgram.fogColorUniform, sky[3]);
 
-	drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack);
+	gl.uniform1i(shaderProgram.discardAlphaUniform, true);
+	drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack, 0);
+
+	gl.uniform1i(shaderProgram.discardAlphaUniform, false);
+	drawModel(gl, shaderProgram, model, mvMatrix, mvMatrixStack, 1);
 }
 
 function main() {
@@ -1341,11 +1371,21 @@ function main() {
 	var gl = initGL(canvas);
 	if(!gl)
 		return null;
+
+	gl.enable(gl.BLEND);
+	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
 	var shaderProgram = initShaders(gl);
 	var skinTexture = initTexture(gl, "Nadnerb.png");
-	var terrainTexture = initTexture(gl, "terrain.png");
+	var terrainDefault = initTexture(gl, "terrain_default.png");
+	var terrainPainterly = initTexture(gl, "terrain_painterly.png");
+	var terrainTexture = terrainDefault;
 	var itemTexture = initTexture(gl, "items.png");
 	var crossTexture = initTexture(gl, "crosshair.png");
+
+	document.getElementById("texture").addEventListener("change", function(event) {
+		terrainTexture = event.target.value == "Default" ? terrainDefault : terrainPainterly;
+	}, false);
 
 	var world = new World(gl);
 	window.world = world;
@@ -1355,7 +1395,7 @@ function main() {
 		matColors: [0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0],
 		normals: [0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0],
 		uvs: [0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5,  0.5, 0.5],
-		faces: [0, 1,  0, 2,  0, 4,  1, 3,  1, 5,  2, 3,  2, 6,  3, 7,  4, 5,  4, 6,  5, 7,  6, 7],
+		faces: [[0, 1,  0, 2,  0, 4,  1, 3,  1, 5,  2, 3,  2, 6,  3, 7,  4, 5,  4, 6,  5, 7,  6, 7]],
 		skyLight: [0, 0, 0, 0, 0, 0, 0, 0],
 		blockLight: [0, 0, 0, 0, 0, 0, 0, 0],
 		location: [0, 0, 0],
@@ -1372,7 +1412,7 @@ function main() {
 		matColors: [1, 1, 1,  1, 1, 1,  1, 1, 1,  1, 1, 1],
 		normals: [0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1],
 		uvs: [0, 0,  1, 0,  1, 1,  0, 1],
-		faces: [0, 1, 2,  0, 2, 3],
+		faces: [[0, 1, 2,  0, 2, 3]],
 		skyLight: [0, 0, 0, 0],
 		blockLight: [1, 1, 1, 1],
 		location: [0, 0, -1],
@@ -1395,9 +1435,10 @@ function main() {
 	var blockModels = new Array();
 
 	var sky = [
-		vec3.create([0.707, -0.707, 0]), // direction
-		vec3.create([1, 0.5, 0]), // diffuse
-		vec3.create([1, 1, 1]) //vec3.create([0.2, 0.2, 0.5]) // ambient
+		vec3.create([0.707, -0.707, 0]), // sky light directional light direction
+		vec3.create([1, 0.5, 0]), // sky directional light color
+		vec3.create([1, 1, 1]), // sky ambient light color
+		vec3.create([0, 0.5, 1]) // sky fog and clearcolor
 	];
 
 	//var camPos = [-20, 50, 30];
@@ -1514,6 +1555,7 @@ function main() {
 	}, false);
 
 	var moveDir = [0, 0, 0];
+	var sneak   = false;
 	document.addEventListener('keydown', function(event) {
 		switch(event.keyCode) {
 		case 87: // 87 w
@@ -1530,6 +1572,9 @@ function main() {
 			break;
 		case 32: // space
 			moveDir[1] = 1;
+			break;
+		case 16: // shift
+			sneak = true;
 			break;
 		default:
 			//alert(event.keyCode);
@@ -1549,6 +1594,9 @@ function main() {
 			break;
 		case 32: // space
 			moveDir[1] = 0;
+			break;
+		case 16: // shift
+			sneak = false;
 			break;
 		}
 	}, false);
@@ -1595,7 +1643,7 @@ function main() {
 			var bid = world.entities[ei].block;
 			if(bid) {
 				if(!blockModels[bid]) {
-					blockModels[bid] = initObjectBuffers(gl, world.generateBlockEntMesh(bid, 0, 0), "chunk", world.createBuffers());
+					blockModels[bid] = initObjectBuffers(gl, world.generateBlockEntMesh(bid, 0, 0), "chunk", world.createBuffers(2));
 				}
 				var blockModel = blockModels[bid];
 				model.push({
@@ -1638,8 +1686,17 @@ function main() {
 			// update the framerate counter
 			document.getElementById("fpsCount").innerText = Math.floor(1000 / average) + " min: " + Math.floor(1000 / max);
 
-			dayRot += elapsed / 5000 * Math.PI;
-			sky[0] = vec3.create([Math.sin(dayRot), Math.cos(dayRot), 0]);
+			dayRot += elapsed / 50000 * Math.PI;
+			sky[0] = vec3.scale([Math.sin(dayRot), Math.cos(dayRot), 0], Math.cos(dayRot) > 0 ? 1 : -1); // skylight direction
+			sky[1] = Math.cos(dayRot) > 0 ? [1, 0.5, 0] : [0.2, 0.2, 0.2]; // skylight directional color
+			sky[2] = vec3.add(
+				vec3.scale([1, 1, 1], Math.max(0, Math.cos(dayRot))), // skylight ambient color
+				vec3.scale([0.1, 0.1, 0.3], 1 - Math.max(0, Math.cos(dayRot)))
+			);
+			sky[3] = vec3.add(
+				vec3.scale([0.6, 0.8, 1], Math.max(0, Math.cos(dayRot))), // sky and fog color
+				vec3.scale([0.1, 0.1, 0.2], 1 - Math.max(0, Math.cos(dayRot)))
+			);
 		
 			// set the player walk force
 			// walk in the -z or -x direction vector of the camera, flattened along the y axis
@@ -1647,9 +1704,10 @@ function main() {
 				vec3.scale(vec3.normalize([-camRot[2], 0, -camRot[10]]), moveDir[2]),
 				vec3.scale(vec3.normalize([-camRot[0], 0, -camRot[8]]), moveDir[0])
 			);
-			vec3.scale(vec3.normalize(vel), world.walkStrength);
+			vec3.scale(vec3.normalize(vel), sneak ? world.walkStrength * 0.25 : world.walkStrength);
 			vec3.add(vel, [0, moveDir[1] * world.jumpStrength, 0]);
 			world.entities[0].walkForce = vel;
+			world.entities[0].sneak = sneak;
 			
 			// progress the simulation to the current time
 			var currentTime = new Date().getTime();
