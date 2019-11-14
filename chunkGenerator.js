@@ -143,6 +143,7 @@ function Chunk(coord) {
 // produce a chunk for a given coordinate on demand
 var chunkQueue = new Array();
 var changeBatch = new Object();
+var textDecoder = new TextDecoder();
 
 self.onmessage = function (msg) {
 	var d = msg.data;
@@ -156,11 +157,17 @@ self.onmessage = function (msg) {
 		// check if the server has a copy of the chunk
 		var req = new XMLHttpRequest();
 		req.open("GET", "chunks/chunk_" + c[0] + "_" + c[1] + "_" + c[2] + ".json.gz");
+		req.responseType = "arraybuffer";
 		req.onreadystatechange = function() {
 			if(req.readyState != req.DONE) return;
 			if(req.status == 200) {
 				// we found a chunk!
-				postMessage(JSON.parse(req.responseText));
+				var u8Response = new Uint8Array(req.response);
+				try {
+					postMessage(JSON.parse(textDecoder.decode(u8Response)));
+				}catch (e) {
+					postMessage(JSON.parse(textDecoder.decode(pako.ungzip(u8Response))));
+				}
 			}else{
 				// not found, generate it ourselves
 				chunkQueue.push(c);
