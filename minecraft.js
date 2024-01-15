@@ -634,6 +634,12 @@ function World(gl) {
 	function isCross(block) {
 		return block == 6;
 	}
+	function isFluid(block) {
+		return block == 8 || block == 9;
+	}
+	function maxFluidLevel(block) {
+		return 16;
+	}
 	function addLights(lights, channel) {
 		// lights is an array of [pos, value] pairs
 		var cellStack = new Array();
@@ -736,14 +742,18 @@ function World(gl) {
 			}
 		}))
 			return;
-		// if there is already an emissive block here, remove it's light
+		// if there is already an emissive block here, remove its light
 		var initBlock = getData(pos[0], pos[1], pos[2], "blocks");
 		if(initBlock == 7) // cannot overwrite bedrock
 			return;
 		if(emit(initBlock))
 			removeLight(pos, "blockLight");
 		setData(pos[0], pos[1], pos[2], "blocks", block);
-		// if we're placing an opaque block, remove light at it's location
+		// if we're placing a fluid block set its level
+		if(isFluid(block)) {
+			setData(pos[0], pos[1], pos[2], "data", 15);
+		}
+		// if we're placing an opaque block, remove light at its location
 		if(opacity(block) > 0) {
 			removeLight(pos, "skyLight");
 			if(!emit(block))
@@ -830,8 +840,9 @@ function World(gl) {
 		var verts = faceVerts[face];
 		if(verts[vert][1] != 1)
 			throw "attempt to shift-check non-top vert";
-		var height = 0;
+		var height = 0; // the four corners check will also include the current block
 		for(var ofs = 0; ofs < 4; ofs++) {
+			// using offsets from the top face to check the 4 horizontal directions
 			var co = [
 				x + verts[vert][0] - faceVerts[0][ofs][0],
 				y + verts[vert][1] - faceVerts[0][ofs][1],
@@ -843,7 +854,7 @@ function World(gl) {
 			if(value > height)
 				height = value;
 		}
-		return value;
+		return height;
 	}
 	function addFace(x, y, z, block, output, bounds, face, id, norm, vertSource, biome) {
 		// inserts all face elements except for vertex lighting
@@ -881,10 +892,9 @@ function World(gl) {
 			addFace(x, y, z, block, output, bounds, face, id, norm, faceVerts, biome);
 			for(var vertIndex = 0; vertIndex < 4; vertIndex++) {
 				// adjust vertical displacement of top vertices
-				var vert = output.vertices[output.vertices.length - 4 + vertIndex];
-				if(vert[1] == 1) {
+				if(faceVerts[face][vertIndex][1] == 1) {
 					var level = getVertHeight(x, y, z, face, vertIndex, block);
-					vec3.subtract(vert, level / maxFluidLevel(block));
+					output.vertices[output.vertices.length - 4 * 3 + vertIndex * 3 + 1] -= 1 - level / maxFluidLevel(block);
 				}
 				// get the vertex lighting attributes
 				if(emit(block)) {
@@ -985,6 +995,8 @@ function World(gl) {
 					var block = getData(x, y, z, "blocks");
 					if(isCross(block)) {
 						addCross(x, y, z, block, output, bounds);
+					}else if(isFluid(block)) {
+						addFluidBlock(x, y, z, block, output, bounds, biome);
 					}else if(block > 0) {
 						// second block layer for biome grass edges
 						if(block == 2)
